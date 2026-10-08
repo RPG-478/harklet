@@ -24,10 +24,10 @@
    - 在 Bot → Privileged Gateway Intents 开启 **Message Content Intent**（面板内自由聊天所需）。
 2. 通过 OAuth2 → URL Generator 邀请 Bot，scope 选择 `bot` + `applications.commands`，权限勾选 `Send Messages` `Create Public Threads` `Read Message History`。
 
-   所需 Bot 权限（位掩码 `3197952`）:
-   - 查看频道、发送消息、在子区发送消息、创建公开子区、读取消息历史
+   所需 Bot 权限（位掩码 `3197968`）:
+   - 查看频道、发送消息、在子区发送消息、创建公开子区、读取消息历史、**管理频道**（`/main set` 自动创建用）
 
-   邀请链接模板: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197952&scope=bot%20applications.commands`
+   邀请链接模板: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197968&scope=bot%20applications.commands`
 3. 安装并配置：
 
 ```bash
@@ -58,7 +58,7 @@ npm start
 | `/remind add|list|cancel` | 提醒。可解析 `10分後` `in 10 min` `tomorrow 9am` `18:30` `2026-10-09 09:00` 等 |
 | `/project <topic>` | 创建项目子区以按主题拆分会话，区内直接输入即可持续对话 |
 | `/panel <topic>` | 同 `/project`（兼容保留） |
-| `/home open|off` | 放置/移除 Home 仪表盘消息（每 30 分钟自动刷新，附刷新按钮） |
+| `/home open|cards|off` | 放置/管理自定义卡片/移除 Home（每 30 分钟自动刷新，附刷新按钮）。AI 可提议“添加到主页”生成动态卡片 |
 | `/brief on|off|now` | 配置 / 手动生成每日简报 |
 | `/ping` | 存活检查 |
 

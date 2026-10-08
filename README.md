@@ -24,10 +24,10 @@ It brings Hark Pro's core experience — **an assistant with persistent memory, 
    - Enable **Message Content Intent** under Bot → Privileged Gateway Intents (required for free chat inside panels).
 2. Invite the bot via OAuth2 → URL Generator with scopes `bot` + `applications.commands` and permissions `Send Messages` `Create Public Threads` `Read Message History`.
 
-   Required bot permissions (bitfield `3197952`):
-   - View Channels, Send Messages, Send Messages in Threads, Create Public Threads, Read Message History
+   Required bot permissions (bitfield `3197968`):
+   - View Channels, Send Messages, Send Messages in Threads, Create Public Threads, Read Message History, **Manage Channels** (for `/main set` auto-setup)
 
-   Invite URL template: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197952&scope=bot%20applications.commands`
+   Invite URL template: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197968&scope=bot%20applications.commands`
 3. Install and configure:
 
 ```bash
@@ -52,13 +52,13 @@ If the Message Content intent is not granted, the bot automatically retries with
 | --- | --- |
 | `/ask <question>` | Ask the assistant. Replies use your memory and may include action buttons |
 | `/model` | Embed + dropdowns to pick model & effort per user (list auto-fetched from provider; staged until you press 決定/Apply) |
-| `/main set|off|show` | Set a main channel where plain messages talk to the assistant (Manage Server required) |
+| `/main set|off|show` | Set the main channel (plain messages = chat). `set` also creates a **Harklet** category with chat/home/projects channels (needs Manage Channels; Manage Server required) |
 | `/remember <text>` | Save a fact to long-term memory |
 | `/memory list|forget|clear` | List / delete memories |
 | `/remind add|list|cancel` | Reminders. Parses `in 10 min`, `tomorrow 9am`, `18:30`, `2026-10-09 09:00`, Japanese (`10分後` `明日9時`), etc. |
 | `/project <topic>` | Create a project thread to split the chat by subject. Just type inside to keep chatting |
 | `/panel <topic>` | Same as `/project` (kept for compatibility) |
-| `/home open|off` | Place/remove the Home dashboard card message (auto-refresh every 30 min) |
+| `/home open|cards|off` | Place/manage custom cards/remove the Home dashboard (auto-refresh every 30 min). AI can offer an Add to Home button that creates dynamic cards |
 | `/brief on|off|now` | Configure / trigger the daily briefing |
 | `/ping` | Health check |
 

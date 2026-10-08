@@ -42,6 +42,7 @@ const commands = [
   new SlashCommandBuilder().setName('home')
     .setDescription('Harklet Home: 興味ある情報をカードで常駐表示(自動更新)')
     .addSubcommand(s => s.setName('open').setDescription('Homeを設置/更新'))
+    .addSubcommand(s => s.setName('cards').setDescription('カスタムカードの一覧・削除'))
     .addSubcommand(s => s.setName('off').setDescription('Homeを解除(自動更新停止)')),
   new SlashCommandBuilder().setName('brief')
     .setDescription('モーニングブリーフ')

@@ -101,11 +101,22 @@ function memoryCard(userId) {
     .setFooter({ text: '/memory list で全件・forget で削除' });
 }
 
+// ユーザーのカスタムカード: 登録プロンプトを毎回LLMに投げて内容を生成
+async function customCard(userId, c) {
+  const r = await chatDsh(userId, `card:${c.id}`, c.prompt).catch(() => null);
+  if (!r) return null;
+  return new EmbedBuilder()
+    .setTitle(`${c.emoji ?? `📊`} ${c.title}`.slice(0, 100))
+    .setColor(c.color ?? 0x9b59b6)
+    .setDescription(r.reply.slice(0, 900));
+}
+
 // ---------- payload ----------
 
 export async function homePayload(userId, actionRows) {
-  const [brief, weather, gh] = await Promise.all([briefCard(userId), weatherCard(userId), githubCard()]);
-  const embeds = [brief.embed, weather, gh, remindersCard(userId), memoryCard(userId)]
+  const customs = store.listHomeCards(userId).slice(0, 4);
+  const [brief, weather, gh, ...customEmbeds] = await Promise.all([briefCard(userId), weatherCard(userId), githubCard(), ...customs.map(c => customCard(userId, c))]);
+  const embeds = [brief.embed, ...customEmbeds, weather, gh, remindersCard(userId), memoryCard(userId)]
     .filter(Boolean).slice(0, 10);
   const newProj = new ButtonBuilder().setCustomId('home_newproj').setLabel('プロジェクト作成').setEmoji('📁').setStyle(ButtonStyle.Primary);
   const region = new ButtonBuilder().setCustomId('home_region').setLabel('地域').setEmoji('📍').setStyle(ButtonStyle.Secondary);

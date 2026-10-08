@@ -117,6 +117,15 @@ async function runAction(interaction, action) {
     store.addMemory(userId, String(action.arg ?? action.label));
     return interaction.reply({ content: `🧠 記憶しました: ${action.arg ?? action.label}`, flags: MessageFlags.Ephemeral });
   }
+  if (action.kind === 'home_card') {
+    let c = {};
+    try { c = JSON.parse(action.arg ?? '{}'); } catch {}
+    if (!c.title || !c.prompt) {
+      return interaction.reply({ content: 'カード定義が壊れています', flags: MessageFlags.Ephemeral });
+    }
+    store.addHomeCard(userId, String(c.title).slice(0, 60), String(c.prompt).slice(0, 500), c.emoji ?? null, c.color ?? null);
+    return interaction.reply({ content: `🏠 Homeにカード「${c.title}」を追加しました`, flags: MessageFlags.Ephemeral });
+  }
   return interaction.reply({ content: '未対応のアクションです。', flags: MessageFlags.Ephemeral });
 }
 
@@ -159,19 +168,44 @@ const handlers = {
       if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
         return i.reply({ content: 'メインチャンネルの設定には「サーバー管理」権限が必要です。', flags: MessageFlags.Ephemeral });
       }
-      const ch = i.options.getChannel('channel') ?? i.channel;
-      store.setMain(i.guildId, ch.id, i.user.id);
-      return i.reply({ content: `📍 メインチャンネルを <#${ch.id}> に設定しました。このチャンネルへの書き込みはそのまま会話になります。` });
+      await i.deferReply();
+      const me = i.guild?.members?.me;
+      if (!me?.permissions?.has(PermissionFlagsBits.ManageChannels)) {
+        return i.editReply('❌ Botに「チャンネル管理」権限が必要です。招待URLの permissions は 3197968 が必要です(README参照)。');
+      }
+      try {
+        const cat = await i.guild.channels.create({ name: 'Harklet', type: ChannelType.GuildCategory });
+        let main = i.options.getChannel('channel');
+        if (!main) main = await i.guild.channels.create({ name: 'chat', type: ChannelType.GuildText, parent: cat.id });
+        const homeCh = await i.guild.channels.create({ name: 'home', type: ChannelType.GuildText, parent: cat.id });
+        const projCh = await i.guild.channels.create({ name: 'projects', type: ChannelType.GuildText, parent: cat.id });
+        store.setMain(i.guildId, main.id, i.user.id);
+        store.setProjectChannel(i.guildId, projCh.id);
+        const m = await homeCh.send(await homePayload(i.user.id, actionRows));
+        store.setHome(i.user.id, homeCh.id, m.id);
+        await projCh.send({
+          content: '📁 **プロジェクト** — 話題ごとの会話スレッド。\n下のボタンか `/project <topic>` で新しいプロジェクトを作成します。',
+          components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('proj_new').setLabel('新規プロジェクト').setEmoji('➕').setStyle(ButtonStyle.Primary),
+          )],
+        });
+        return i.editReply(`📍 セットアップしました: 💬<#${main.id}> / 🏠<#${homeCh.id}> / 📁<#${projCh.id}>\nchat への書き込みはそのまま会話になります。home は30分ごとに自動更新。`);
+      } catch (e) {
+        return i.editReply('❌ チャンネル作成に失敗: ' + e.message);
+      }
     }
     if (sub === 'off') {
       if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
         return i.reply({ content: '「サーバー管理」権限が必要です。', flags: MessageFlags.Ephemeral });
       }
       store.clearMain(i.guildId);
-      return i.reply({ content: '📍 メインチャンネル設定を解除しました。' });
+      store.clearProjectChannel(i.guildId);
+      return i.reply({ content: '📍 メイン/プロジェクト設定を解除しました(チャンネル自体は残ります)' });
     }
     const ch = store.getMain(i.guildId);
-    return i.reply({ content: ch ? `📍 メインチャンネル: <#${ch}>` : 'メインチャンネルは未設定です。', flags: MessageFlags.Ephemeral });
+    const pj = store.getProjectChannel(i.guildId);
+    const parts = [`📍 メイン: ${ch ? `<#${ch}>` : '未設定'}`, `📁 プロジェクト: ${pj ? `<#${pj}>` : '未設定'}`];
+    return i.reply({ content: parts.join(' / '), flags: MessageFlags.Ephemeral });
   },
 
   async remember(i) {
@@ -246,6 +280,17 @@ const handlers = {
 
   async home(i) {
     const sub = i.options.getSubcommand();
+    if (sub === 'cards') {
+      const cards = store.listHomeCards(i.user.id);
+      if (!cards.length) {
+        return i.reply({ content: 'カスタムカードはまだありません。会話で提案された「ホームに追加」ボタンから増えます', flags: MessageFlags.Ephemeral });
+      }
+      const lines = cards.map(c => `#${c.id} ${c.emoji ?? ''} ${c.title}`);
+      const rows = cards.slice(0, 5).map(c => new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`hcard_del:${c.id}`).setLabel(`削除: ${c.title.slice(0, 30)}`).setStyle(ButtonStyle.Danger),
+      ));
+      return i.reply({ content: '🏠 カスタムカード\n' + lines.join('\n'), components: rows, flags: MessageFlags.Ephemeral });
+    }
     if (sub === 'off') {
       store.clearHome(i.user.id);
       return i.reply({ content: '🏠 Homeを解除しました(自動更新を停止)', flags: MessageFlags.Ephemeral });
@@ -413,6 +458,26 @@ client.on('interactionCreate', async (interaction) => {
     } else if (interaction.isButton() && interaction.customId === 'home_refresh') {
       await interaction.deferUpdate();
       try { await interaction.message.edit(await homePayload(interaction.user.id, actionRows)); } catch {}
+    } else if (interaction.isButton() && interaction.customId.startsWith('hcard_del:')) {
+      const id = Number(interaction.customId.slice(10));
+      const ok = store.delHomeCard(interaction.user.id, id);
+      await interaction.update({ content: ok ? `🗑️ カード #${id} を削除しました` : "見つかりません", components: [] });
+      const st = store.getSettings(interaction.user.id);
+      if (st?.home_message_id) {
+        try {
+          const ch = await client.channels.fetch(st.home_channel_id);
+          const m = await ch.messages.fetch(st.home_message_id);
+          await m.edit(await homePayload(interaction.user.id, actionRows));
+        } catch {}
+      }
+    } else if (interaction.isButton() && interaction.customId === 'proj_new') {
+      const modal = new ModalBuilder().setCustomId('proj_modal').setTitle('プロジェクト作成');
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('proj_topic')
+          .setLabel('トピック(例: C2Bサイト改善)')
+          .setStyle(TextInputStyle.Short).setRequired(true),
+      ));
+      await interaction.showModal(modal);
     } else if (interaction.isButton() && interaction.customId === 'home_region') {
       const modal = new ModalBuilder().setCustomId('home_region_modal').setTitle('地域を設定');
       modal.addComponents(new ActionRowBuilder().addComponents(
@@ -433,6 +498,16 @@ client.on('interactionCreate', async (interaction) => {
       const name = interaction.fields.getTextInputValue('model_name').trim();
       pendingModelSel.set(interaction.user.id, name);
       await interaction.update(await modelPanel(interaction.user.id));
+    } else if (interaction.isModalSubmit() && interaction.customId === 'proj_modal') {
+      const topic = interaction.fields.getTextInputValue('proj_topic').trim();
+      const ch = interaction.channel;
+      if (!ch || ch.type !== ChannelType.GuildText) {
+        return interaction.reply({ content: 'テキストチャンネルで実行してください', flags: MessageFlags.Ephemeral });
+      }
+      const thread = await ch.threads.create({ name: `pj-${topic.slice(0, 90)}`, autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek });
+      store.addPanel(thread.id, interaction.user.id, topic);
+      await thread.send(`📁 プロジェクト「${topic}」。${interaction.user} との会話をここに記録します。はじめの一言をどうぞ。`);
+      await interaction.reply({ content: `📁 プロジェクトを作成しました: ${thread}`, flags: MessageFlags.Ephemeral });
     } else if (interaction.isModalSubmit() && interaction.customId === 'home_region_modal') {
       const name = interaction.fields.getTextInputValue('region_city').trim();
       await interaction.deferUpdate();

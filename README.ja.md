@@ -24,10 +24,10 @@ Hark Pro(hark.com)の中核体験 — **記憶を持つアシスタント、会�
    - Bot 設定で **Message Content Intent** を ON(パネル内の自由会話に必要)。
 2. OAuth2 → URL Generator で `bot` + `applications.commands` を選択し、Bot Permissions は `Send Messages` `Create Public Threads` `Read Message History` を付けて招待。
 
-   必要なBot権限（ビットフィールド `3197952`）:
-   - チャンネルの閲覧、メッセージ送信、スレッドでのメッセージ送信、公開スレッド作成、メッセージ履歴の閲覧
+   必要なBot権限（ビットフィールド `3197968`）:
+   - チャンネルの閲覧、メッセージ送信、スレッドでのメッセージ送信、公開スレッド作成、メッセージ履歴の閲覧、**チャンネルの管理**(`/main set` の自動作成用)
 
-   招待URLテンプレート: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197952&scope=bot%20applications.commands`
+   招待URLテンプレート: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197968&scope=bot%20applications.commands`
 3. リポジトリをセットアップ:
 
 ```bash
@@ -50,13 +50,13 @@ npm start
 | --- | --- |
 | `/ask <question>` | アシスタントに質問。記憶を踏まえて回答し、実行ボタンを提案 |
 | `/model` | Embed + プルダウンでモデル＆Reasoning effortをユーザーごとに切替。一覧はAPIから自動取得し、選択は「決定」ボタンで確定 |
-| `/main set|off|show` | メインチャンネル設定。そこへの書き込みはそのまま会話に（要「サーバー管理」権限） |
+| `/main set|off|show` | メインチャンネル設定。`set` で Harklet カテゴリ(chat/home/projects)も自動生成（要「サーバー管理」+Botに「チャンネル管理」） |
 | `/remember <text>` | 長期記憶に保存 |
 | `/memory list|forget|clear` | 記憶の一覧・削除 |
 | `/remind add|list|cancel` | リマインダー。`10分後` `明日9時` `18:30` `2026-10-09 09:00` `in 10 min` `tomorrow 9am` などを解釈 |
 | `/project <topic>` | プロジェクト(話題別スレッド)を作成。内部は書き込むだけで会話が続く |
 | `/panel <topic>` | `/project` と同じ(互換用) |
-| `/home open|off` | Homeダッシュボードを設置/解除(30分ごと自動更新・更新ボタンあり) |
+| `/home open|cards|off` | Home設置/カスタムカード管理/解除(30分ごと自動更新・更新ボタンあり)。AI提案の「ホームに追加」ボタンで動的カードが増える |
 | `/brief on|off|now` | 毎朝のブリーフィング設定・手動生成 |
 | `/ping` | 生存確認 |
 

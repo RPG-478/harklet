@@ -52,6 +52,19 @@ CREATE TABLE IF NOT EXISTS main_channels (
   channel_id TEXT NOT NULL,
   set_by TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS home_cards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  emoji TEXT,
+  color INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS project_channels (
+  guild_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL
+);
 `);
 
 // v2: per-user LLM prefs / v3: home message anchor
@@ -97,6 +110,12 @@ const q = {
       home_lat=excluded.home_lat, home_lon=excluded.home_lon`),
   clearHome: db.prepare('UPDATE settings SET home_channel_id=NULL, home_message_id=NULL WHERE user_id=?'),
   homeTargets: db.prepare('SELECT user_id, home_channel_id, home_message_id FROM settings WHERE home_channel_id IS NOT NULL'),
+  addHomeCard: db.prepare('INSERT INTO home_cards (user_id, title, prompt, emoji, color, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
+  listHomeCards: db.prepare('SELECT id, title, prompt, emoji, color FROM home_cards WHERE user_id = ? ORDER BY id'),
+  delHomeCard: db.prepare('DELETE FROM home_cards WHERE id = ? AND user_id = ?'),
+  setProjectChannel: db.prepare('INSERT OR REPLACE INTO project_channels (guild_id, channel_id) VALUES (?, ?)'),
+  getProjectChannel: db.prepare('SELECT channel_id FROM project_channels WHERE guild_id = ?'),
+  clearProjectChannel: db.prepare('DELETE FROM project_channels WHERE guild_id = ?'),
   setMain: db.prepare('INSERT OR REPLACE INTO main_channels (guild_id, channel_id, set_by) VALUES (?, ?, ?)'),
   getMain: db.prepare('SELECT channel_id FROM main_channels WHERE guild_id = ?'),
   clearMain: db.prepare('DELETE FROM main_channels WHERE guild_id = ?'),
@@ -136,6 +155,12 @@ export const store = {
   setHomeCity: (userId, city, lat, lon) => q.setHomeCity.run(userId, city, lat, lon),
   clearHome: (userId) => q.clearHome.run(userId),
   homeTargets: () => q.homeTargets.all(),
+  addHomeCard: (userId, title, prompt, emoji, color) => q.addHomeCard.run(userId, title, prompt, emoji, color, Date.now()),
+  listHomeCards: (userId) => q.listHomeCards.all(userId),
+  delHomeCard: (userId, id) => q.delHomeCard.run(id, userId).changes > 0,
+  setProjectChannel: (guildId, channelId) => q.setProjectChannel.run(guildId, channelId),
+  getProjectChannel: (guildId) => q.getProjectChannel.get(guildId)?.channel_id ?? null,
+  clearProjectChannel: (guildId) => q.clearProjectChannel.run(guildId),
   setMain: (guildId, channelId, setBy) => q.setMain.run(guildId, channelId, setBy),
   getMain: (guildId) => q.getMain.get(guildId)?.channel_id ?? null,
   clearMain: (guildId) => q.clearMain.run(guildId),
