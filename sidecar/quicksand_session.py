@@ -60,16 +60,23 @@ async def main():
         if viewer_port:
             # The bundled noVNC has no authentication. Enforce read-only at the
             # VNC server and expose it only through QEMU's loopback host forward.
-            await vm.execute("systemctl stop x11vnc.service")
-            viewonly = await vm.execute("setsid x11vnc -display :0 -forever -shared -viewonly "
-                "-localhost -nopw -rfbport 5901 >/tmp/harklet-vnc.log 2>&1 </dev/null &")
-            if viewonly.exit_code == 0:
+            override = await vm.execute("mkdir -p /run/systemd/system/x11vnc.service.d && "
+                "printf '[Service]\\nExecStart=\\nExecStart=/usr/bin/x11vnc -display :0 "
+                "-rfbport 5901 -forever -shared -nopw -localhost -viewonly\\n' "
+                "> /run/systemd/system/x11vnc.service.d/harklet.conf && "
+                "systemctl daemon-reload && systemctl restart x11vnc.service novnc.service")
+            if override.exit_code == 0:
                 bridge = await vm.execute("setsid socat TCP-LISTEN:6081,bind=0.0.0.0,reuseaddr,fork "
                     "TCP:127.0.0.1:6080 >/tmp/harklet-novnc-relay.log 2>&1 </dev/null &")
                 if bridge.exit_code == 0:
-                    probe = await vm.execute("curl -fsS --max-time 2 http://127.0.0.1:6080/vnc.html >/dev/null")
-                    vnc = await vm.execute("ss -ltn | grep -q ':5901 ' && pgrep -af 'x11vnc.*-viewonly' >/dev/null")
-                    viewer_ready = probe.exit_code == 0 and vnc.exit_code == 0
+                    for _ in range(20):
+                        probe = await vm.execute("curl -fsS --max-time 2 http://127.0.0.1:6080/vnc.html >/dev/null")
+                        vnc = await vm.execute("ss -ltn | grep -q ':5901 ' && "
+                            "ps -C x11vnc -o args= | grep -q -- '-viewonly'")
+                        if probe.exit_code == 0 and vnc.exit_code == 0:
+                            viewer_ready = True
+                            break
+                        await asyncio.sleep(0.5)
         for _ in range(20):
             probe = await vm.execute("curl -fsS --max-time 2 http://127.0.0.1:9222/json/version")
             if probe.exit_code == 0:
