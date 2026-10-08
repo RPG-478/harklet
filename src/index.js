@@ -124,7 +124,18 @@ async function runAction(interaction, action) {
       return interaction.reply({ content: 'カード定義が壊れています', flags: MessageFlags.Ephemeral });
     }
     store.addHomeCard(userId, String(c.title).slice(0, 60), String(c.prompt).slice(0, 500), c.emoji ?? null, c.color ?? null);
-    return interaction.reply({ content: `🏠 Homeにカード「${c.title}」を追加しました`, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: `🏠 Homeにカード「${c.title}」を追加しました`, flags: MessageFlags.Ephemeral });
+    const st = store.getSettings(userId);
+    if (st?.home_message_id) {
+      try {
+        const ch = await client.channels.fetch(st.home_channel_id);
+        const m = await ch.messages.fetch(st.home_message_id);
+        await m.edit(await homePayload(userId, actionRows));
+      } catch {}
+    } else {
+      await interaction.followUp({ content: 'Homeが未設置です。`/home open` で設置できます', flags: MessageFlags.Ephemeral });
+    }
+    return;
   }
   return interaction.reply({ content: '未対応のアクションです。', flags: MessageFlags.Ephemeral });
 }
