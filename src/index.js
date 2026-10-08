@@ -11,6 +11,7 @@ import { homePayload, geocodeCity } from './home.js';
 import { listModels } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
 import { handleComputerInteraction, startComputerTask, computerIsBusy } from './computer/controller.js';
+import { detachedProjectThreads } from './reset-plan.js';
 
 function makeClient(withContent) {
   const intents = [
@@ -64,7 +65,13 @@ async function resetTargets(guild) {
 async function performReset(i) {
   if (computerIsBusy()) throw new Error('Computer Useの作業中です。/computer stop で停止してから再実行してください');
   const { category, channels, threads } = await resetTargets(i.guild);
-  for (const thread of threads) await thread.delete('Harklet test reset');
+  // Deleting a parent channel also removes its threads. The bot has ManageChannels,
+  // but may not have ManageThreads, so only delete threads outside managed channels.
+  const detachedThreads = detachedProjectThreads(channels, threads);
+  if (detachedThreads.length && !i.guild.members.me?.permissions.has(PermissionFlagsBits.ManageThreads)) {
+    throw new Error('管理カテゴリ外にプロジェクトスレッドがあります。Botに「スレッド管理」権限を付けてから再実行してください');
+  }
+  for (const thread of detachedThreads) await thread.delete('Harklet test reset');
   for (const channel of channels) await channel.delete('Harklet test reset');
   if (category) await category.delete('Harklet test reset');
   await shutdownDsh();

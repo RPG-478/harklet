@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { detachedProjectThreads } from '../src/reset-plan.js';
 
 const dir = await mkdtemp(join(tmpdir(), 'harklet-reset-'));
 process.env.DISCORD_TOKEN = 'test-token';
@@ -11,6 +12,11 @@ process.env.HARKLET_DB = join(dir, 'test.db');
 process.env.HARKLET_SECRET_KEY = 'reset-test-secret-key-0123456789';
 const { db, store, clearHarkletDatabase } = await import('../src/db.js');
 const { vault } = await import('../src/computer/vault.js');
+
+test('reset deletes project threads separately only when their parent remains', () => {
+  const threads = [{ id: 'in', parentId: 'managed' }, { id: 'outside', parentId: 'other' }];
+  assert.deepEqual(detachedProjectThreads([{ id: 'managed' }], threads), [threads[1]]);
+});
 
 test('test reset clears bot data including credentials and keeps the schema usable', async () => {
   try {
