@@ -45,7 +45,7 @@ export function buildVisionRequest({ provider, baseUrl, apiKey, model, system, t
         max_tokens: MAX_TOKENS,
         system,
         messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: pngBase64 } },
+          ...(pngBase64 ? [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: pngBase64 } }] : []),
           { type: 'text', text },
         ] }],
       },
@@ -57,7 +57,7 @@ export function buildVisionRequest({ provider, baseUrl, apiKey, model, system, t
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: {
         systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'image/png', data: pngBase64 } }, { text }] }],
+        contents: [{ role: 'user', parts: [...(pngBase64 ? [{ inlineData: { mimeType: 'image/png', data: pngBase64 } }] : []), { text }] }],
         generationConfig: { temperature: 0, maxOutputTokens: MAX_TOKENS, responseMimeType: 'application/json' },
       },
     };
@@ -73,7 +73,7 @@ export function buildVisionRequest({ provider, baseUrl, apiKey, model, system, t
         { role: 'system', content: system },
         { role: 'user', content: [
           { type: 'text', text },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,' + pngBase64 } },
+          ...(pngBase64 ? [{ type: 'image_url', image_url: { url: 'data:image/png;base64,' + pngBase64 } }] : []),
         ] },
       ],
     },

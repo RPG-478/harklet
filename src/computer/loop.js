@@ -1,6 +1,9 @@
 import { parseAction } from './actions.js';
 import { redact } from './names.js';
 
+// Stop only after this many turns in a row without a model reply or a screen.
+const MAX_CONSECUTIVE_FAILURES = 3;
+
 function toBridge(a) {
   switch (a.action) {
     case 'click':
@@ -50,6 +53,9 @@ function describe(a) {
 }
 
 // Runs observe -> decide -> act until the model says done/fail, or a limit is hit.
+// Problems on the model or screen side are written into the history, so the next
+// turn can see them. A rejected image is dropped from later turns. The run stops only
+// after several turns in a row fail.
 // Secret values only ever go from the vault to sidecar.act (type_secret). They are
 // never passed to decide(), never put in history and never returned in the result.
 export async function runComputerTask(opts) {
@@ -64,12 +70,22 @@ export async function runComputerTask(opts) {
     history.push(line);
     if (history.length > 30) history.splice(0, history.length - 30);
   };
+  let useImage = true;
+  let failures = 0;
+  let size = { width: 0, height: 0 };
 
   for (let step = 1; step <= maxSteps; step++) {
     if (signal?.aborted) return { status: 'stopped' };
     if (Date.now() - started > deadlineMs) return { status: 'timeout' };
 
-    const shot = await sidecar.screenshot(sessionId);
+    let shot = null;
+    try {
+      shot = await sidecar.screenshot(sessionId);
+      size = { width: shot.width, height: shot.height };
+    } catch (err) {
+      note(step + '. 画面を取得できませんでした（' + err.message + '）。前回の画面サイズで判断します');
+    }
+
     const elementList = await readElements(sidecar, sessionId);
     const secretNames = vault.listSecretNames(userId);
     const known = new Map();
@@ -77,19 +93,40 @@ export async function runComputerTask(opts) {
       const v = vault.getSecret(userId, name);
       if (v) known.set(name, v);
     }
-    const raw = await decide({
-      task,
-      history: history.slice(-12).map(h => redact(h, known)),
-      pngBase64: shot.png_base64,
-      width: shot.width,
-      height: shot.height,
-      secretNames,
-      elements: elementList ? elementList.elements : null,
-    });
+
+    let raw;
+    try {
+      raw = await decide({
+        task,
+        history: history.slice(-12).map(h => redact(h, known)),
+        pngBase64: useImage && shot ? shot.png_base64 : null,
+        width: size.width,
+        height: size.height,
+        secretNames,
+        elements: elementList ? elementList.elements : null,
+      });
+    } catch (err) {
+      failures++;
+      if (useImage && err.status === 400) {
+        useImage = false;
+        note(step + '. 画像付きの送信が拒否されました（' + err.message + '）。以後は画像なしで続けます');
+      } else {
+        note(step + '. モデルへの送信が失敗しました（' + err.message + '）');
+      }
+      if (failures >= MAX_CONSECUTIVE_FAILURES) {
+        return { status: 'failed', reason: '連続して応答を得られませんでした: ' + err.message, steps: step };
+      }
+      continue;
+    }
+
+    failures = shot ? 0 : failures + 1;
+    if (failures >= MAX_CONSECUTIVE_FAILURES) {
+      return { status: 'failed', reason: '画面を取得できない状態が続いたので止めました', steps: step };
+    }
 
     const parsed = parseAction(raw, {
-      width: shot.width,
-      height: shot.height,
+      width: size.width,
+      height: size.height,
       elementCount: elementList ? elementList.elements.length : 0,
     });
     if (!parsed.ok) {
