@@ -12,7 +12,7 @@ export const SYSTEM_PROMPT = [
   'scroll: {"action": "scroll", "x": 数, "y": 数, "dy": 整数(-20から20、0以外)}',
   'type: {"action": "type", "text": "文字列"}。保存済みの値以外の文字を入力するときだけ使う',
   'type_secret: {"action": "type_secret", "name": "保存名"}。保存済みのログイン情報を入力する。値そのものはあなたには見えない',
-  'key: {"action": "key", "keys": ["ctrl", "a"]}',
+  'key: {"action": "key", "keys": ["ctrl", "a"]}。許可するのは Enter/Tab/Shift+Tab/Escape/Backspace/Delete/Space/矢印/全選択のみ',
   'wait: {"action": "wait", "seconds": 数}。画面の読み込みを待つ',
   'request_secrets: {"action": "request_secrets", "message": "利用者への依頼文", "fields": [{"name": "保存名", "label": "表示名"}]}。ログイン情報が必要で、まだ保存されていない時に使う',
   'done: {"action": "done", "summary": "結果の要約"}。作業が終わった時',

@@ -106,9 +106,11 @@ async function elements(id) {
   return { window: { title: await p.title().catch(() => ''), url: p.url() }, elements: items };
 }
 
-const KEY = { ctrl: 'Control', control: 'Control', alt: 'Alt', shift: 'Shift', meta: 'Meta', cmd: 'Meta',
+const KEY = { ctrl: 'Control', control: 'Control', shift: 'Shift', meta: 'Meta', cmd: 'Meta',
   enter: 'Enter', return: 'Enter', tab: 'Tab', esc: 'Escape', escape: 'Escape', backspace: 'Backspace',
   delete: 'Delete', space: 'Space', up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+const ALLOWED_KEYS = new Set(['Enter', 'Tab', 'Shift+Tab', 'Escape', 'Backspace', 'Delete', 'Space',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Control+A', 'Meta+A']);
 
 async function act(id, action) {
   const s = session(id);
@@ -133,8 +135,9 @@ async function act(id, action) {
     case 'type': await p.keyboard.insertText(action.text); break;
     case 'key': {
       const chord = action.keys.map(k => KEY[k.toLowerCase()] || (k.length === 1 ? k.toUpperCase() : null));
-      if (chord.includes(null)) throw new Error('未対応のキーです');
-      await p.keyboard.press(chord.join('+'));
+      const combo = chord.join('+');
+      if (chord.includes(null) || !ALLOWED_KEYS.has(combo)) throw new Error('未対応のキー操作です');
+      await p.keyboard.press(combo);
       break;
     }
     default: throw new Error('未対応の操作です');

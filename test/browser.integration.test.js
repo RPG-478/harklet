@@ -46,6 +46,7 @@ test('dedicated browser can navigate, see, click, type and keep its own origin',
     assert.ok(page.elements.length >= 2);
     assert.equal(page.window.title, 'Harklet test');
     await assert.rejects(browser.act(id, { type: 'navigate', url: 'file:///etc/passwd' }));
+    await assert.rejects(browser.act(id, { type: 'key', keys: ['ctrl', 'l'] }));
     delete process.env.HARKLET_BROWSER_ALLOW_PRIVATE;
     ({ id: blockedId } = await browser.createSession('blocked-user'));
     await assert.rejects(browser.act(blockedId, { type: 'navigate', url: origin }));
