@@ -50,7 +50,8 @@ npm start
 | 命令 | 说明 |
 | --- | --- |
 | `/ask <question>` | 向助手提问。回复基于你的记忆，并可附带操作按钮 |
-| `/model show|set|reset` | 每用户模型与推理强度（`low`/`medium`/`high`）切换 |
+| `/model` | Embed + 下拉菜单为每用户切换模型与推理强度 |
+| `/main set|off|show` | 设置主频道，频道内直接发言即可与助手对话（需"管理服务器"权限） |
 | `/remember <text>` | 保存事实到长期记忆 |
 | `/memory list|forget|clear` | 查看 / 删除记忆 |
 | `/remind add|list|cancel` | 提醒。可解析 `10分後` `in 10 min` `tomorrow 9am` `18:30` `2026-10-09 09:00` 等 |

@@ -48,7 +48,8 @@ npm start
 | コマンド | 説明 |
 | --- | --- |
 | `/ask <question>` | アシスタントに質問。記憶を踏まえて回答し、実行ボタンを提案 |
-| `/model show|set|reset` | ユーザーごとのモデル＆Reasoning effort(`low`/`medium`/`high`)切替 |
+| `/model` | Embed + プルダウンでモデル＆Reasoning effortをユーザーごとに切替 |
+| `/main set|off|show` | メインチャンネル設定。そこへの書き込みはそのまま会話に（要「サーバー管理」権限） |
 | `/remember <text>` | 長期記憶に保存 |
 | `/memory list|forget|clear` | 記憶の一覧・削除 |
 | `/remind add|list|cancel` | リマインダー。`10分後` `明日9時` `18:30` `2026-10-09 09:00` `in 10 min` `tomorrow 9am` などを解釈 |

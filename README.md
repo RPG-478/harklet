@@ -50,7 +50,8 @@ If the Message Content intent is not granted, the bot automatically retries with
 | Command | Description |
 | --- | --- |
 | `/ask <question>` | Ask the assistant. Replies use your memory and may include action buttons |
-| `/model show|set|reset` | Per-user model & reasoning effort (`low`/`medium`/`high`) |
+| `/model` | Embed + dropdowns to pick model & reasoning effort per user |
+| `/main set|off|show` | Set a main channel where plain messages talk to the assistant (Manage Server required) |
 | `/remember <text>` | Save a fact to long-term memory |
 | `/memory list|forget|clear` | List / delete memories |
 | `/remind add|list|cancel` | Reminders. Parses `in 10 min`, `tomorrow 9am`, `18:30`, `2026-10-09 09:00`, Japanese (`10分後` `明日9時`), etc. |
