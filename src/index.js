@@ -10,6 +10,7 @@ import { chatDsh, invalidateUserAgents } from './dsh-agent.js';
 import { homePayload, geocodeCity } from './home.js';
 import { listModels } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
+import { handleComputerInteraction } from './computer/controller.js';
 
 function makeClient(withContent) {
   const intents = [
@@ -420,6 +421,7 @@ async function replyWithPlaceholder(message, scope, text = message.content) {
 function attachEvents(client) {
 
 client.on('interactionCreate', async (interaction) => {
+  if (await handleComputerInteraction(interaction)) return;
   try {
     if (interaction.isChatInputCommand()) {
       const h = handlers[interaction.commandName];

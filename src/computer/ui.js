@@ -1,0 +1,39 @@
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+
+// The request is posted in the channel. Only the requesting user can open the modal.
+export function secretRequestPayload(reqId, message, fields) {
+  const embed = new EmbedBuilder()
+    .setTitle('🔐 ログイン情報の入力')
+    .setDescription(message)
+    .addFields({ name: '入力する項目', value: fields.map(f => '・' + f.label).join(' / ') })
+    .setColor(0xfaa61a)
+    .setFooter({ text: '入力値は暗号化して保存し、AIには渡しません。依頼した本人だけが押せます' });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('cu_secret:' + reqId).setLabel('入力する').setStyle(ButtonStyle.Primary),
+  );
+  return { embeds: [embed], components: [row] };
+}
+
+export function secretModal(reqId, fields) {
+  const modal = new ModalBuilder().setCustomId('cu_secret_modal:' + reqId).setTitle('ログイン情報');
+  modal.addComponents(...fields.map(f => new ActionRowBuilder().addComponents(
+    new TextInputBuilder()
+      .setCustomId(f.name)
+      .setLabel(f.label.slice(0, 45))
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMaxLength(500),
+  )));
+  return modal;
+}
+
+export function viewerPayload(url) {
+  const embed = new EmbedBuilder()
+    .setTitle('🖥️ 作業中の画面')
+    .setDescription('このリンクは画面を操作できます（約1時間有効）。他の人に共有しないでください。')
+    .setColor(0x5865f2);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setLabel('画面を開く').setStyle(ButtonStyle.Link).setURL(url),
+  );
+  return { embeds: [embed], components: [row] };
+}

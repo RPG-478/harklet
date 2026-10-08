@@ -51,6 +51,12 @@ const commands = [
       .addChannelOption(o => o.setName('channel').setDescription('送信先チャンネル')))
     .addSubcommand(s => s.setName('off').setDescription('停止'))
     .addSubcommand(s => s.setName('now').setDescription('今すぐ試す')),
+  new SlashCommandBuilder().setName('computer')
+    .setDescription('Agent用の仮想デスクトップで作業（Docker上のLinux画面）')
+    .addSubcommand(s => s.setName('run').setDescription('作業を依頼する')
+      .addStringOption(o => o.setName('task').setDescription('やってほしいこと').setRequired(true)))
+    .addSubcommand(s => s.setName('view').setDescription('作業中の画面を見る（本人だけに表示）'))
+    .addSubcommand(s => s.setName('stop').setDescription('作業を止めて画面を破棄')),
 ].map(c => c.toJSON());
 
 const rest = new REST().setToken(config.discordToken);

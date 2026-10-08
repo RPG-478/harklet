@@ -1,0 +1,3 @@
+cua-sandbox==0.9.0
+cua-driver==0.34.0
+aiohttp>=3.9
