@@ -22,6 +22,11 @@ It brings Hark Pro's core experience — **an assistant with persistent memory, 
 1. Create an application at the [Discord Developer Portal](https://discord.com/developers/applications) and get a bot token.
    - Enable **Message Content Intent** under Bot → Privileged Gateway Intents (required for free chat inside panels).
 2. Invite the bot via OAuth2 → URL Generator with scopes `bot` + `applications.commands` and permissions `Send Messages` `Create Public Threads` `Read Message History`.
+
+   Required bot permissions (bitfield `3197952`):
+   - View Channels, Send Messages, Send Messages in Threads, Create Public Threads, Read Message History
+
+   Invite URL template: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197952&scope=bot%20applications.commands`
 3. Install and configure:
 
 ```bash
@@ -45,6 +50,7 @@ If the Message Content intent is not granted, the bot automatically retries with
 | Command | Description |
 | --- | --- |
 | `/ask <question>` | Ask the assistant. Replies use your memory and may include action buttons |
+| `/model show|set|reset` | Per-user model & reasoning effort (`low`/`medium`/`high`) |
 | `/remember <text>` | Save a fact to long-term memory |
 | `/memory list|forget|clear` | List / delete memories |
 | `/remind add|list|cancel` | Reminders. Parses `in 10 min`, `tomorrow 9am`, `18:30`, `2026-10-09 09:00`, Japanese (`10分後` `明日9時`), etc. |
@@ -54,7 +60,15 @@ If the Message Content intent is not granted, the bot automatically retries with
 
 ## LLM backend
 
-Any OpenAI-compatible chat completions API works. Point `OPENAI_BASE_URL` and `OPENAI_MODEL` at OpenAI, OpenRouter, LM Studio, Ollama, etc. Without a key, non-AI features still work and `/ask` replies with a setup hint.
+Three provider styles are supported; the active one is auto-detected from which key is present (override with `LLM_PROVIDER`):
+
+| Provider | Key env | API |
+| --- | --- | --- |
+| `openai` | `OPENAI_API_KEY` / `OPENROUTER_API_KEY` | OpenAI-compatible `/chat/completions` — works with OpenAI, OpenRouter, LM Studio, Ollama, Gemini's compat endpoint |
+| `anthropic` | `ANTHROPIC_API_KEY` | Native `/v1/messages` |
+| `google` | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Native `generateContent` |
+
+`/model` lets each user pick a model and reasoning effort. Effort maps per provider: OpenRouter → `reasoning.effort`, OpenAI → `reasoning_effort`, Anthropic → `thinking.budget_tokens`, Gemini → `thinkingConfig.thinkingBudget`.
 
 ## How it works
 

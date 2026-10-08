@@ -22,6 +22,11 @@
 1. 在 [Discord Developer Portal](https://discord.com/developers/applications) 创建应用并获取 Bot Token。
    - 在 Bot → Privileged Gateway Intents 开启 **Message Content Intent**（面板内自由聊天所需）。
 2. 通过 OAuth2 → URL Generator 邀请 Bot，scope 选择 `bot` + `applications.commands`，权限勾选 `Send Messages` `Create Public Threads` `Read Message History`。
+
+   所需 Bot 权限（位掩码 `3197952`）:
+   - 查看频道、发送消息、在子区发送消息、创建公开子区、读取消息历史
+
+   邀请链接模板: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197952&scope=bot%20applications.commands`
 3. 安装并配置：
 
 ```bash
@@ -45,6 +50,7 @@ npm start
 | 命令 | 说明 |
 | --- | --- |
 | `/ask <question>` | 向助手提问。回复基于你的记忆，并可附带操作按钮 |
+| `/model show|set|reset` | 每用户模型与推理强度（`low`/`medium`/`high`）切换 |
 | `/remember <text>` | 保存事实到长期记忆 |
 | `/memory list|forget|clear` | 查看 / 删除记忆 |
 | `/remind add|list|cancel` | 提醒。可解析 `10分後` `in 10 min` `tomorrow 9am` `18:30` `2026-10-09 09:00` 等 |
@@ -54,7 +60,15 @@ npm start
 
 ## LLM 后端
 
-兼容任何 OpenAI 格式的 chat completions API。修改 `OPENAI_BASE_URL` 和 `OPENAI_MODEL` 即可接入 OpenAI、OpenRouter、LM Studio、Ollama 等。未配置密钥时，非 AI 功能仍可用，`/ask` 会回复设置提示。
+支持三种提供商，按已配置的密钥自动识别（可用 `LLM_PROVIDER` 强制指定）:
+
+| 提供商 | 密钥环境变量 | API |
+| --- | --- | --- |
+| `openai` | `OPENAI_API_KEY` / `OPENROUTER_API_KEY` | OpenAI 兼容 `/chat/completions` — OpenAI / OpenRouter / LM Studio / Ollama / Gemini 兼容端点 |
+| `anthropic` | `ANTHROPIC_API_KEY` | 原生 `/v1/messages` |
+| `google` | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | 原生 `generateContent` |
+
+`/model` 支持每用户切换模型与推理强度。effort 按提供商映射: OpenRouter→`reasoning.effort`、OpenAI→`reasoning_effort`、Anthropic→`thinking.budget_tokens`、Gemini→`thinkingConfig.thinkingBudget`。
 
 ## 结构
 
@@ -71,4 +85,3 @@ npm start
 ## License
 
 MIT
-

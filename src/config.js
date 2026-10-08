@@ -11,11 +11,37 @@ export const config = {
   clientId: required('DISCORD_CLIENT_ID'),
   // Set to a guild ID during development for instant command registration.
   guildId: process.env.DISCORD_GUILD_ID?.trim() || null,
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY?.trim() || '',
-    baseUrl: (process.env.OPENAI_BASE_URL?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, ''),
-    model: process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini',
-  },
   dbPath: process.env.HARKLET_DB?.trim() || new URL('../harklet.db', import.meta.url).pathname,
 };
 
+// --- LLM provider detection ---
+// openai  : OpenAI-compatible /chat/completions (OpenAI, OpenRouter, LM Studio,
+//           Ollama, Gemini OpenAI-compat endpoint, ...)
+// anthropic: native POST {base}/v1/messages
+// google  : native {base}/models/{model}:generateContent
+const env = process.env;
+const provider = (env.LLM_PROVIDER?.trim().toLowerCase()) ||
+  (env.OPENROUTER_API_KEY || env.OPENAI_API_KEY ? 'openai'
+    : env.ANTHROPIC_API_KEY ? 'anthropic'
+    : (env.GEMINI_API_KEY || env.GOOGLE_API_KEY) ? 'google' : 'openai');
+
+const PROVIDER_DEFAULTS = {
+  openai:    { baseUrl: 'https://api.openai.com/v1',        model: 'gpt-4.1-mini' },
+  anthropic: { baseUrl: 'https://api.anthropic.com',        model: 'claude-sonnet-4-5' },
+  google:    { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash' },
+};
+
+const isOpenRouter = !env.OPENAI_API_KEY && !!env.OPENROUTER_API_KEY;
+config.llm = {
+  provider,
+  apiKey:
+    (provider === 'openai' ? (env.LLM_API_KEY || env.OPENAI_API_KEY || env.OPENROUTER_API_KEY)
+     : provider === 'anthropic' ? (env.LLM_API_KEY || env.ANTHROPIC_API_KEY)
+     : (env.LLM_API_KEY || env.GEMINI_API_KEY || env.GOOGLE_API_KEY))?.trim() || '',
+  baseUrl: (
+    (provider === 'openai' ? (env.OPENAI_BASE_URL || env.OPENROUTER_BASE_URL || (isOpenRouter ? 'https://openrouter.ai/api/v1' : null))
+     : provider === 'anthropic' ? env.ANTHROPIC_BASE_URL
+     : env.GOOGLE_BASE_URL) || PROVIDER_DEFAULTS[provider].baseUrl
+  ).replace(/\/+$/, ''),
+  model: (env.LLM_MODEL || env.OPENAI_MODEL || PROVIDER_DEFAULTS[provider].model).trim(),
+};

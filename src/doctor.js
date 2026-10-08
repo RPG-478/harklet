@@ -9,8 +9,9 @@ const warn = (name, extra = '') => console.log(`-- ${name} ${extra}`);
 
 check('DISCORD_TOKEN', !!config.discordToken);
 check('DISCORD_CLIENT_ID', !!config.clientId);
-if (config.openai.apiKey) check('OPENAI_API_KEY', true);
-else warn('OPENAI_API_KEY', '(未設定: /ask・パネル会話・ブリーフ生成は応答不可。他は動作)');
+const llm = config.llm;
+check('LLM provider', !!llm.apiKey, `${llm.provider} / ${llm.model}`);
+if (!llm.apiKey) warn('LLM', '(キー未設定: /ask・パネル会話・ブリーフ生成は応答不可)');
 
 // Discord token check
 try {
@@ -21,15 +22,15 @@ try {
   check('Botトークン有効', r.ok, r.ok ? `(@${body.username})` : JSON.stringify(body).slice(0, 200));
 } catch (e) { check('Botトークン有効', false, e.message); }
 
-// LLM check
-if (config.openai.apiKey) {
+// LLM check (OpenAI-compatible endpoint; native providers are checked implicitly on first /ask)
+if (llm.apiKey && llm.provider === 'openai') {
   try {
-    const r = await fetch(`${config.openai.baseUrl}/chat/completions`, {
+    const r = await fetch(`${llm.baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.openai.apiKey}` },
-      body: JSON.stringify({ model: config.openai.model, messages: [{ role: 'user', content: '{"reply":"ok"}' }], max_tokens: 20 }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${llm.apiKey}` },
+      body: JSON.stringify({ model: llm.model, messages: [{ role: 'user', content: '{"reply":"ok"}' }], max_tokens: 20 }),
     });
-    check('LLM接続', r.ok, r.ok ? `(model: ${config.openai.model})` : `HTTP ${r.status}`);
+    check('LLM接続', r.ok, r.ok ? `(model: ${llm.model})` : `HTTP ${r.status}`);
   } catch (e) { check('LLM接続', false, e.message); }
 }
 

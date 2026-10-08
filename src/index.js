@@ -82,6 +82,26 @@ const handlers = {
 
   ask: (i) => answer(i),
 
+  async model(i) {
+    const sub = i.options.getSubcommand() ?? 'show';
+    const s = store.getSettings(i.user.id) ?? {};
+    const fmt = (st) => 'model: *' + (st.model || config.llm.model) + '* / effort: *' + (st.effort || 'default') + '*\n(provider: ' + config.llm.provider + ', default: *' + config.llm.model + '*)';
+    if (sub === 'set') {
+      const model = i.options.getString('model');
+      const effort = i.options.getString('effort');
+      if (model) store.setModel(i.user.id, model);
+      if (effort) store.setEffort(i.user.id, effort === 'default' ? null : effort);
+      const now = store.getSettings(i.user.id) ?? {};
+      return i.reply({ content: '🧠 モデル設定を更新: ' + fmt(now), ephemeral: true });
+    }
+    if (sub === 'reset') {
+      store.setModel(i.user.id, null);
+      store.setEffort(i.user.id, null);
+      return i.reply({ content: '🧠 デフォルトに戻しました: ' + fmt({}), ephemeral: true });
+    }
+    return i.reply({ content: '🧠 現在: ' + fmt(s), ephemeral: true });
+  },
+
   async remember(i) {
     const text = i.options.getString('text', true);
     store.addMemory(i.user.id, text);

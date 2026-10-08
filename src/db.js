@@ -49,6 +49,11 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
+// v2: per-user LLM prefs
+for (const col of ['model TEXT', 'effort TEXT']) {
+  try { db.exec(`ALTER TABLE settings ADD COLUMN ${col}`); } catch { /* exists */ }
+}
+
 const q = {
   addMemory: db.prepare('INSERT INTO memories (user_id, content, created_at) VALUES (?, ?, ?)'),
   listMemories: db.prepare('SELECT id, content FROM memories WHERE user_id = ? ORDER BY id DESC LIMIT 100'),
@@ -74,6 +79,10 @@ const q = {
       brief_time=excluded.brief_time, brief_channel=excluded.brief_channel`),
   markBriefSent: db.prepare('UPDATE settings SET brief_last_sent = ? WHERE user_id = ?'),
   briefTargets: db.prepare('SELECT user_id, brief_time, brief_channel FROM settings WHERE brief_enabled = 1'),
+  setModel: db.prepare(`INSERT INTO settings (user_id, model) VALUES (?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET model=excluded.model`),
+  setEffort: db.prepare(`INSERT INTO settings (user_id, effort) VALUES (?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET effort=excluded.effort`),
 };
 
 export const store = {
@@ -104,5 +113,6 @@ export const store = {
   upsertSettings: (userId, enabled, time, channel) => q.upsertSettings.run(userId, enabled, time, channel),
   markBriefSent: (userId, day) => q.markBriefSent.run(day, userId),
   briefTargets: () => q.briefTargets.all(),
+  setModel: (userId, model) => q.setModel.run(userId, model),
+  setEffort: (userId, effort) => q.setEffort.run(userId, effort),
 };
-

@@ -22,6 +22,11 @@ Hark Pro(hark.com)の中核体験 — **記憶を持つアシスタント、会�
 1. [Discord Developer Portal](https://discord.com/developers/applications) で Application を作成し、Bot トークンを取得。
    - Bot 設定で **Message Content Intent** を ON(パネル内の自由会話に必要)。
 2. OAuth2 → URL Generator で `bot` + `applications.commands` を選択し、Bot Permissions は `Send Messages` `Create Public Threads` `Read Message History` を付けて招待。
+
+   必要なBot権限（ビットフィールド `3197952`）:
+   - チャンネルの閲覧、メッセージ送信、スレッドでのメッセージ送信、公開スレッド作成、メッセージ履歴の閲覧
+
+   招待URLテンプレート: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197952&scope=bot%20applications.commands`
 3. リポジトリをセットアップ:
 
 ```bash
@@ -43,6 +48,7 @@ npm start
 | コマンド | 説明 |
 | --- | --- |
 | `/ask <question>` | アシスタントに質問。記憶を踏まえて回答し、実行ボタンを提案 |
+| `/model show|set|reset` | ユーザーごとのモデル＆Reasoning effort(`low`/`medium`/`high`)切替 |
 | `/remember <text>` | 長期記憶に保存 |
 | `/memory list|forget|clear` | 記憶の一覧・削除 |
 | `/remind add|list|cancel` | リマインダー。`10分後` `明日9時` `18:30` `2026-10-09 09:00` `in 10 min` `tomorrow 9am` などを解釈 |
@@ -52,7 +58,15 @@ npm start
 
 ## LLM バックエンド
 
-OpenAI 互換 API なら何でも使えます。`OPENAI_BASE_URL` と `OPENAI_MODEL` を変えれば OpenRouter、LM Studio、Ollama などにも接続可能。
+3系統のプロバイダをサポート。設定されたキーから自動判別します(`LLM_PROVIDER` で強制指定も可):
+
+| Provider | キー環境変数 | API |
+| --- | --- | --- |
+| `openai` | `OPENAI_API_KEY` / `OPENROUTER_API_KEY` | OpenAI互換 `/chat/completions` — OpenAI / OpenRouter / LM Studio / Ollama / Gemini互換エンドポイント |
+| `anthropic` | `ANTHROPIC_API_KEY` | ネイティブ `/v1/messages` |
+| `google` | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | ネイティブ `generateContent` |
+
+`/model` でユーザーごとにモデルと Reasoning effort を切替可能。effort はプロバイダ別に変換: OpenRouter→`reasoning.effort`、OpenAI→`reasoning_effort`、Anthropic→`thinking.budget_tokens`、Gemini→`thinkingConfig.thinkingBudget`。
 
 ## 仕組み
 

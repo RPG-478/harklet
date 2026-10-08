@@ -1,6 +1,8 @@
 import { config } from './config.js';
 import { store } from './db.js';
 
+const EFFORT_BUDGET = { low: 1024, medium: 4096, high: 16384 };
+
 const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord 上のパーソナルアシスタント。
 ユーザーの記憶を長期保持し、会話の中から次の一手を提案して実行ボタンで支援する。
 
@@ -20,6 +22,87 @@ function parseJsonLoose(text) {
   try { return JSON.parse(m[0]); } catch { return null; }
 }
 
+function resolveOpts(userId) {
+  const s = store.getSettings(userId) ?? {};
+  return {
+    model: s.model || config.llm.model,
+    effort: (s.effort || '').toLowerCase() || null,
+  };
+}
+
+// Returns { url, init, extract } for the configured provider.
+// effort mapping:
+//   openai/openrouter -> reasoning_effort / reasoning:{effort}
+//   anthropic         -> thinking:{type:"enabled",budget_tokens}
+//   google            -> generationConfig.thinkingConfig.thinkingBudget
+function buildRequest(messages, llm, opts) {
+  const effort = opts.effort;
+
+  if (llm.provider === 'anthropic') {
+    const system = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
+    const rest = messages.filter(m => m.role !== 'system');
+    const body = { model: opts.model, max_tokens: 4096, messages: rest };
+    if (system) body.system = system;
+    if (effort && EFFORT_BUDGET[effort]) {
+      body.thinking = { type: 'enabled', budget_tokens: EFFORT_BUDGET[effort] };
+      body.max_tokens = Math.max(body.max_tokens, EFFORT_BUDGET[effort] + 2048);
+    }
+    return {
+      url: `${llm.baseUrl}/v1/messages`,
+      init: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': llm.apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(body),
+      },
+      extract: (d) => (d.content ?? []).filter(b => b.type === 'text').map(b => b.text).join(''),
+    };
+  }
+
+  if (llm.provider === 'google') {
+    const system = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
+    const rest = messages.filter(m => m.role !== 'system');
+    const body = {
+      contents: rest.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      })),
+    };
+    if (system) body.systemInstruction = { parts: [{ text: system }] };
+    if (effort && EFFORT_BUDGET[effort]) {
+      body.generationConfig = { thinkingConfig: { thinkingBudget: EFFORT_BUDGET[effort] } };
+    }
+    return {
+      url: `${llm.baseUrl}/models/${encodeURIComponent(opts.model)}:generateContent`,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': llm.apiKey },
+        body: JSON.stringify(body),
+      },
+      extract: (d) => (d.candidates?.[0]?.content?.parts ?? []).map(p => p.text ?? '').join(''),
+    };
+  }
+
+  // openai-compatible (OpenAI / OpenRouter / local servers)
+  const body = { model: opts.model, messages, temperature: 0.7 };
+  if (effort) {
+    if (llm.baseUrl.includes('openrouter')) body.reasoning = { effort };
+    else body.reasoning_effort = effort;
+  }
+  return {
+    url: `${llm.baseUrl}/chat/completions`,
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${llm.apiKey}` },
+      body: JSON.stringify(body),
+    },
+    extract: (d) => d.choices?.[0]?.message?.content ?? '',
+  };
+}
+
 export async function chat(userId, scope, userText) {
   const memories = store.listMemories(userId);
   const memoryBlock = memories.length
@@ -34,24 +117,21 @@ export async function chat(userId, scope, userText) {
     { role: 'user', content: userText },
   ];
 
-  if (!config.openai.apiKey) {
+  if (!config.llm.apiKey) {
     return {
-      reply: '⚙️ LLMが未設定です。`OPENAI_API_KEY` を .env に設定してください。Discord側の動作確認はこのまま可能です。',
+      reply: '⚙️ LLMが未設定です。.env に `OPENROUTER_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` のいずれかを設定してください。',
       actions: [], remember: [],
     };
   }
 
-  const res = await fetch(`${config.openai.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.openai.apiKey}` },
-    body: JSON.stringify({ model: config.openai.model, messages, temperature: 0.7 }),
-  });
+  const { url, init, extract } = buildRequest(messages, config.llm, resolveOpts(userId));
+  const res = await fetch(url, init);
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`LLM request failed: ${res.status} ${body.slice(0, 300)}`);
   }
   const data = await res.json();
-  const raw = data.choices?.[0]?.message?.content ?? '';
+  const raw = extract(data);
   const parsed = parseJsonLoose(raw) ?? { reply: raw };
 
   const result = {
@@ -67,4 +147,3 @@ export async function chat(userId, scope, userText) {
   store.addHistory(scope, userId, 'assistant', result.reply);
   return result;
 }
-

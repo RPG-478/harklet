@@ -7,6 +7,18 @@ const commands = [
     .setDescription('Harkletに質問・相談する')
     .addStringOption(o => o.setName('question').setDescription('質問や相談').setRequired(true))
     .addBooleanOption(o => o.setName('private').setDescription('自分だけに表示')),
+  new SlashCommandBuilder().setName('model')
+    .setDescription('LLMモデル・Reasoning effortの切替')
+    .addSubcommand(s => s.setName('show').setDescription('現在の設定を表示'))
+    .addSubcommand(s => s.setName('set').setDescription('モデルやeffortを変更')
+      .addStringOption(o => o.setName('model').setDescription('例: openai/gpt-5, anthropic/claude-sonnet-4-5'))
+      .addStringOption(o => o.setName('effort').setDescription('推論の強度')
+        .addChoices(
+          { name: 'default', value: 'default' },
+          { name: 'low', value: 'low' },
+          { name: 'medium', value: 'medium' },
+          { name: 'high', value: 'high' })))
+    .addSubcommand(s => s.setName('reset').setDescription('デフォルトに戻す')),
   new SlashCommandBuilder().setName('remember')
     .setDescription('事実を長期記憶に保存')
     .addStringOption(o => o.setName('text').setDescription('覚えてほしいこと').setRequired(true)),
@@ -43,4 +55,3 @@ const route = config.guildId
 
 await rest.put(route, { body: commands });
 console.log(`Registered ${commands.length} commands ${config.guildId ? `to guild ${config.guildId}` : 'globally'}`);
-
