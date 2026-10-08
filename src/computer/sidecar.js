@@ -93,3 +93,4 @@ export const sidecar = {
     token = null;
   },
 };
+process.once('exit', () => sidecar.stop());

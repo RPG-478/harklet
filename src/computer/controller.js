@@ -62,10 +62,17 @@ async function startRun(interaction, task) {
   if (!vaultReady()) throw new Error('HARKLET_SECRET_KEY を .env に設定してから再起動してください（16文字以上）');
   if (!config.llm.apiKey) throw new Error('LLMのAPIキーが未設定です');
   if (running.has(userId)) throw new Error('すでに作業中です。/computer stop で止められます');
-  await interaction.deferReply({ flags: EPHEMERAL });
-  const s = await ensureSession(userId);
+  // Claim the slot before the first await so a second click cannot start a second run.
   const abort = new AbortController();
   running.set(userId, abort);
+  let s;
+  try {
+    await interaction.deferReply({ flags: EPHEMERAL });
+    s = await ensureSession(userId);
+  } catch (err) {
+    running.delete(userId);
+    throw err;
+  }
   const channel = interaction.channel;
   const post = text => channel?.send(text).catch(() => {});
   await post('🖥️ <@' + userId + '> の作業を開始します: ' + task.slice(0, 200));
