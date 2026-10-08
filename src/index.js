@@ -1,6 +1,8 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client,
   GatewayIntentBits, ThreadAutoArchiveDuration,
+  EmbedBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder,
+  TextInputStyle, PermissionFlagsBits,
 } from 'discord.js';
 import { config } from './config.js';
 import { store } from './db.js';
@@ -20,6 +22,52 @@ function makeClient(withContent) {
 let client = makeClient(true);
 
 // ---------- helpers ----------
+
+const MODEL_CHOICES = [
+  ['openai/gpt-4.1-mini', 'GPT-4.1 mini'],
+  ['openai/gpt-4.1', 'GPT-4.1'],
+  ['openai/o4-mini', 'o4-mini'],
+  ['anthropic/claude-sonnet-4-5', 'Claude Sonnet 4.5'],
+  ['anthropic/claude-haiku-4-5', 'Claude Haiku 4.5'],
+  ['google/gemini-2.5-flash', 'Gemini 2.5 Flash'],
+  ['google/gemini-2.5-pro', 'Gemini 2.5 Pro'],
+  ['x-ai/grok-code-fast-1', 'Grok Code Fast'],
+];
+
+function modelPanel(userId) {
+  const s = store.getSettings(userId) ?? {};
+  const embed = new EmbedBuilder()
+    .setTitle('🧠 LLM 設定')
+    .setColor(0x5865f2)
+    .addFields(
+      { name: 'model', value: '`' + (s.model || config.llm.model) + '`', inline: true },
+      { name: 'effort', value: s.effort || 'default', inline: true },
+      { name: 'provider', value: config.llm.provider, inline: true },
+    )
+    .setFooter({ text: '選択はあなた個人の設定です。/model reset でデフォルトに戻せます' });
+  const modelMenu = new StringSelectMenuBuilder()
+    .setCustomId('model_sel')
+    .setPlaceholder('モデルを選択')
+    .addOptions(MODEL_CHOICES.map(([v, l]) => ({ label: l, value: v, default: (s.model || config.llm.model) === v })));
+  const effortMenu = new StringSelectMenuBuilder()
+    .setCustomId('effort_sel')
+    .setPlaceholder('Reasoning effort')
+    .addOptions(
+      { label: 'default', value: 'default', default: !s.effort },
+      { label: 'low', value: 'low', default: s.effort === 'low' },
+      { label: 'medium', value: 'medium', default: s.effort === 'medium' },
+      { label: 'high', value: 'high', default: s.effort === 'high' },
+    );
+  const customBtn = new ButtonBuilder().setCustomId('model_custom').setLabel('自由入力').setStyle(ButtonStyle.Secondary);
+  return {
+    embeds: [embed],
+    components: [
+      new ActionRowBuilder().addComponents(modelMenu),
+      new ActionRowBuilder().addComponents(effortMenu),
+      new ActionRowBuilder().addComponents(customBtn),
+    ],
+  };
+}
 
 function actionRows(userId, actions) {
   const rows = [];
@@ -83,23 +131,29 @@ const handlers = {
   ask: (i) => answer(i),
 
   async model(i) {
-    const sub = i.options.getSubcommand() ?? 'show';
-    const s = store.getSettings(i.user.id) ?? {};
-    const fmt = (st) => 'model: *' + (st.model || config.llm.model) + '* / effort: *' + (st.effort || 'default') + '*\n(provider: ' + config.llm.provider + ', default: *' + config.llm.model + '*)';
+    await i.reply({ ...modelPanel(i.user.id), ephemeral: true });
+  },
+
+  async main(i) {
+    const sub = i.options.getSubcommand();
+    if (!i.guildId) return i.reply({ content: 'サーバー内で実行してください。', ephemeral: true });
     if (sub === 'set') {
-      const model = i.options.getString('model');
-      const effort = i.options.getString('effort');
-      if (model) store.setModel(i.user.id, model);
-      if (effort) store.setEffort(i.user.id, effort === 'default' ? null : effort);
-      const now = store.getSettings(i.user.id) ?? {};
-      return i.reply({ content: '🧠 モデル設定を更新: ' + fmt(now), ephemeral: true });
+      if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+        return i.reply({ content: 'メインチャンネルの設定には「サーバー管理」権限が必要です。', ephemeral: true });
+      }
+      const ch = i.options.getChannel('channel') ?? i.channel;
+      store.setMain(i.guildId, ch.id, i.user.id);
+      return i.reply({ content: `📍 メインチャンネルを <#${ch.id}> に設定しました。このチャンネルへの書き込みはそのまま会話になります。` });
     }
-    if (sub === 'reset') {
-      store.setModel(i.user.id, null);
-      store.setEffort(i.user.id, null);
-      return i.reply({ content: '🧠 デフォルトに戻しました: ' + fmt({}), ephemeral: true });
+    if (sub === 'off') {
+      if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+        return i.reply({ content: '「サーバー管理」権限が必要です。', ephemeral: true });
+      }
+      store.clearMain(i.guildId);
+      return i.reply({ content: '📍 メインチャンネル設定を解除しました。' });
     }
-    return i.reply({ content: '🧠 現在: ' + fmt(s), ephemeral: true });
+    const ch = store.getMain(i.guildId);
+    return i.reply({ content: ch ? `📍 メインチャンネル: <#${ch}>` : 'メインチャンネルは未設定です。', ephemeral: true });
   },
 
   async remember(i) {
@@ -257,6 +311,26 @@ client.on('interactionCreate', async (interaction) => {
       if (!a) return interaction.reply({ content: 'このアクションは期限切れです。', ephemeral: true });
       await runAction(interaction, a.payload);
       store.delAction(Number(interaction.customId.slice(4)));
+    } else if (interaction.isButton() && interaction.customId === 'model_custom') {
+      const modal = new ModalBuilder().setCustomId('model_modal').setTitle('モデルを自由入力');
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('model_name')
+          .setLabel('モデル名 (例: openai/gpt-5, anthropic/claude-sonnet-4-5)')
+          .setStyle(TextInputStyle.Short).setRequired(true),
+      ));
+      await interaction.showModal(modal);
+    } else if (interaction.isModalSubmit() && interaction.customId === 'model_modal') {
+      const name = interaction.fields.getTextInputValue('model_name').trim();
+      store.setModel(interaction.user.id, name);
+      await interaction.update(modelPanel(interaction.user.id));
+    } else if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === 'model_sel') {
+        store.setModel(interaction.user.id, interaction.values[0]);
+      } else if (interaction.customId === 'effort_sel') {
+        const v = interaction.values[0];
+        store.setEffort(interaction.user.id, v === 'default' ? null : v);
+      }
+      await interaction.update(modelPanel(interaction.user.id));
     }
   } catch (e) {
     console.error(e);
@@ -267,10 +341,30 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.channel.isThread()) return;
+  if (!message.content.trim()) return;
+  if (message.author.bot) return;
+
+  // メインチャンネル: 書き込むだけで会話
+  if (message.guildId && message.channel.id === store.getMain(message.guildId)) {
+    await message.channel.sendTyping();
+    try {
+      const scope = `main:${message.channel.id}`;
+      const result = await chat(message.author.id, scope, message.content);
+      const rows = actionRows(message.author.id, result.actions);
+      for (let i = 0; i < result.reply.length; i += 1900) {
+        const last = i + 1900 >= result.reply.length;
+        await message.reply({ content: result.reply.slice(i, i + 1900), components: last ? rows : [] });
+      }
+    } catch (e) {
+      await message.reply(`⚠️ エラー: ${e.message}`);
+    }
+    return;
+  }
+
+  // パネルスレッド
+  if (!message.channel.isThread()) return;
   const panel = store.getPanel(message.channel.id);
   if (!panel || message.author.id !== panel.user_id) return;
-  if (!message.content.trim()) return;
   await message.channel.sendTyping();
   try {
     const scope = `panel:${message.channel.id}`;

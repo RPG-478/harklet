@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS settings (
   brief_channel TEXT,
   brief_last_sent TEXT
 );
+CREATE TABLE IF NOT EXISTS main_channels (
+  guild_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  set_by TEXT NOT NULL
+);
 `);
 
 // v2: per-user LLM prefs
@@ -83,6 +88,9 @@ const q = {
     ON CONFLICT(user_id) DO UPDATE SET model=excluded.model`),
   setEffort: db.prepare(`INSERT INTO settings (user_id, effort) VALUES (?, ?)
     ON CONFLICT(user_id) DO UPDATE SET effort=excluded.effort`),
+  setMain: db.prepare('INSERT OR REPLACE INTO main_channels (guild_id, channel_id, set_by) VALUES (?, ?, ?)'),
+  getMain: db.prepare('SELECT channel_id FROM main_channels WHERE guild_id = ?'),
+  clearMain: db.prepare('DELETE FROM main_channels WHERE guild_id = ?'),
 };
 
 export const store = {
@@ -115,4 +123,7 @@ export const store = {
   briefTargets: () => q.briefTargets.all(),
   setModel: (userId, model) => q.setModel.run(userId, model),
   setEffort: (userId, effort) => q.setEffort.run(userId, effort),
+  setMain: (guildId, channelId, setBy) => q.setMain.run(guildId, channelId, setBy),
+  getMain: (guildId) => q.getMain.get(guildId)?.channel_id ?? null,
+  clearMain: (guildId) => q.clearMain.run(guildId),
 };
