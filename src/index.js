@@ -63,7 +63,7 @@ async function resetTargets(guild) {
 }
 
 async function performReset(i) {
-  if (computerIsBusy()) throw new Error('Computer Useの作業中です。/computer stop で停止してから再実行してください');
+  if (computerIsBusy()) throw new Error('Computer Useの作業中です。/stop で停止してから再実行してください');
   const { category, channels, threads } = await resetTargets(i.guild);
   // Deleting a parent channel also removes its threads. The bot has ManageChannels,
   // but may not have ManageThreads, so only delete threads outside managed channels.

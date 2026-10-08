@@ -4,7 +4,7 @@ import { vault, vaultReady } from './vault.js';
 import { browser } from './browser.js';
 import { makeDecider } from './vision.js';
 import { runComputerTask } from './loop.js';
-import { secretRequestPayload, secretModal, viewerPayload } from './ui.js';
+import { secretRequestPayload, secretModal } from './ui.js';
 import { retrying, retryingBrowser } from './retry.js';
 
 const IDLE_MS = 30 * 60 * 1000;
@@ -23,8 +23,15 @@ function visionModel() {
 }
 
 export async function handleComputerInteraction(interaction) {
+  if (interaction.isChatInputCommand() && interaction.commandName === 'stop') {
+    await guard(interaction, () => stopRun(interaction));
+    return true;
+  }
+  // Handle cached /computer interactions until Discord removes the old command.
   if (interaction.isChatInputCommand() && interaction.commandName === 'computer') {
-    await guard(interaction, () => handleCommand(interaction));
+    await guard(interaction, () => interaction.options.getSubcommand() === 'stop'
+      ? stopRun(interaction)
+      : interaction.reply({ content: 'Web作業はチャットで依頼できます。停止は /stop を使ってください。', flags: EPHEMERAL }));
     return true;
   }
   if (interaction.isButton() && interaction.customId.startsWith('cu_secret:')) {
@@ -53,28 +60,13 @@ async function guard(interaction, fn) {
   }
 }
 
-async function handleCommand(interaction) {
-  const sub = interaction.options.getSubcommand();
-  if (sub === 'run') return startRun(interaction, interaction.options.getString('task', true));
-  if (sub === 'view') return showViewer(interaction);
-  if (sub === 'watch') return showLiveViewer(interaction);
-  if (sub === 'stop') return stopRun(interaction);
-}
-
-async function startRun(interaction, task) {
-  const userId = interaction.user.id;
-  await interaction.deferReply({ flags: EPHEMERAL });
-  const status = await startComputerTask({ userId, task, channel: interaction.channel });
-  await interaction.editReply(status);
-}
-
 // The chat agent and /computer share one user slot, session and credential flow.
 export async function startComputerTask({ userId, task, channel, post: customPost, onDone }) {
   task = String(task ?? '').trim();
   if (!task || task.length > 2000) throw new Error('作業内容を1〜2000文字で指定してください');
   if (!vaultReady()) throw new Error('HARKLET_SECRET_KEY を .env に設定してから再起動してください（16文字以上）');
   if (!config.llm.apiKey) throw new Error('LLMのAPIキーが未設定です');
-  if (running.has(userId)) throw new Error('すでに作業中です。/computer stop で止められます');
+  if (running.has(userId)) throw new Error('すでに作業中です。/stop で止められます');
   // Claim the slot before the first await so a second click cannot start a second run.
   const abort = new AbortController();
   running.set(userId, abort);
@@ -88,10 +80,11 @@ export async function startComputerTask({ userId, task, channel, post: customPos
   const post = customPost ?? (text => channel?.send(text).catch(() => {}));
   await post('🖥️ <@' + userId + '> の作業を開始します: ' + task.slice(0, 200));
   const viewer = browser.viewerUrl(s.id);
+  const remoteViewer = browser.remoteViewer(s.id);
   let sentViewer = false;
   if (viewer) {
     // Never put the live screen link into a public guild channel.
-    const notice = `🖥️ 作業中の画面を見る（このBotと同じPCのみ）: ${viewer}\nVNCからの入力は無効です。画面にはログイン中の内容も映ります。`;
+    const notice = `🖥️ 作業中の画面を見る${remoteViewer ? '（スマホ・別ネットワークからも可）' : '（Botと同じPCのみ）'}: ${viewer}\n閲覧専用です。URLを知る人は画面を見られるため、共有しないでください。停止は /stop。`;
     try {
       const user = await channel?.client?.users?.fetch(userId);
       if (user) { await user.send(notice); sentViewer = true; }
@@ -99,8 +92,9 @@ export async function startComputerTask({ userId, task, channel, post: customPos
   }
   void runTask(userId, s, task, abort, channel, post, onDone);
   return '🖥️ ブラウザ作業を開始しました。完了したら結果をお知らせします。' +
-    (sentViewer ? '\n同じPCで開ける画面URLをDMへ送りました。/computer watch でも確認できます。'
-      : viewer ? '\n画面URLは /computer watch で確認できます。' : '');
+    (sentViewer ? '\n画面URLをDMへ送りました。停止は /stop。'
+      : viewer ? '\n画面URLを送れませんでした。BotからのDMを許可してください。停止は /stop。'
+        : '\n画面のライブ表示は利用できません。停止は /stop。');
 }
 
 async function runTask(userId, s, task, abort, channel, post, onDone) {
@@ -181,29 +175,6 @@ async function destroySession(userId) {
   sessions.delete(userId);
   clearTimeout(s.idleTimer);
   await browser.destroySession(s.id);
-}
-
-async function showViewer(interaction) {
-  await interaction.deferReply({ flags: EPHEMERAL });
-  const userId = interaction.user.id;
-  const s = sessions.get(userId);
-  if (!s) {
-    await interaction.editReply('作業用の画面がありません。チャットでWeb作業を依頼してください');
-    return;
-  }
-  const shot = await browser.screenshot(s.id);
-  bumpIdle(userId);
-  await interaction.editReply(viewerPayload(Buffer.from(shot.png_base64, 'base64')));
-}
-
-async function showLiveViewer(interaction) {
-  await interaction.deferReply({ flags: EPHEMERAL });
-  const s = sessions.get(interaction.user.id);
-  if (!s) return interaction.editReply('作業用の画面がありません。チャットでWeb作業を依頼してください');
-  const url = browser.viewerUrl(s.id);
-  if (!url) return interaction.editReply('このブラウザではライブ画面を利用できません。/computer view で静止画を確認してください');
-  bumpIdle(interaction.user.id);
-  return interaction.editReply(`🖥️ 作業中の画面（このBotと同じPCのみ）: ${url}\nVNCからの入力は無効です。画面にはログイン中の内容も映ります。`);
 }
 
 async function stopRun(interaction) {

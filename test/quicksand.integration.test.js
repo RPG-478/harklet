@@ -24,8 +24,16 @@ test('Quicksand VM persists browser cookies across restarts',
     try {
       ({ id } = await browser.createSession('persistent-user'));
       const viewer = browser.viewerUrl(id);
-      assert.match(viewer, /^http:\/\/127\.0\.0\.1:\d+\/vnc\.html\?/);
-      const viewerResponse = await fetch(viewer, { signal: AbortSignal.timeout(5000) });
+      if (process.env.HARKLET_TEST_REMOTE_VIEWER === '1') assert.equal(browser.remoteViewer(id), true);
+      if (browser.remoteViewer(id)) assert.match(viewer, /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/open\?key=/);
+      else assert.match(viewer, /^http:\/\/127\.0\.0\.1:\d+\/vnc\.html\?/);
+      const opened = await fetch(viewer, { redirect: 'manual', signal: AbortSignal.timeout(10000) });
+      const viewerResponse = browser.remoteViewer(id)
+        ? await fetch(new URL(opened.headers.get('location'), viewer), {
+          headers: { cookie: opened.headers.get('set-cookie').split(';')[0] },
+          signal: AbortSignal.timeout(10000),
+        })
+        : opened;
       assert.equal(viewerResponse.status, 200);
       await browser.act(id, { type: 'navigate', url: base + '/set' });
       await browser.act(id, { type: 'navigate', url: base + '/check' });

@@ -26,11 +26,8 @@ const commands = [
     .addSubcommand(s => s.setName('open').setDescription('Homeを設置/更新'))
     .addSubcommand(s => s.setName('cards').setDescription('カスタムカードの一覧・削除'))
     .addSubcommand(s => s.setName('off').setDescription('Homeを解除(自動更新停止)')),
-  new SlashCommandBuilder().setName('computer')
-    .setDescription('Agentの作業画面を確認・停止する')
-    .addSubcommand(s => s.setName('view').setDescription('作業中の画面を見る（本人だけに表示）'))
-    .addSubcommand(s => s.setName('watch').setDescription('作業中のライブ画面URLを見る（Botと同じPC）'))
-    .addSubcommand(s => s.setName('stop').setDescription('作業を止めて画面を破棄')),
+  new SlashCommandBuilder().setName('stop')
+    .setDescription('Agentのブラウザ作業を止めて画面を保存する'),
 ];
 
 // This command clears the entire Harklet database, so expose it only in an opted-in test guild.

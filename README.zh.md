@@ -2,7 +2,7 @@
 
 # harklet
 
-`/computer` uses a dedicated Quicksand Linux VM for web tasks and does not require Docker. See [setup and limitations](docs/browser-agent.md).
+Chat browser work uses a dedicated Quicksand Linux VM and does not require Docker. Use `/stop` to save and close it. See [setup and limitations](docs/browser-agent.md).
 
 **Languages:** [English](./README.md) | [日本語](./README.ja.md) | 中文
 
@@ -59,7 +59,7 @@ npm start
 | `/main set|off|show` | 设置主频道，频道内直接发言即可与助手对话（需"管理服务器"权限） |
 | `/memory list|forget|clear` | 查看 / 删除记忆 |
 | `/home open|cards|off` | 放置/管理自定义卡片/移除 Home（每 30 分钟自动刷新，附刷新按钮）。AI 可提议“添加到主页”生成动态卡片 |
-| `/computer view|watch|stop` | 查看或停止聊天中启动的浏览器任务 |
+| `/stop` | 停止浏览器任务并保存虚拟机 |
 
 ## LLM 后端
 

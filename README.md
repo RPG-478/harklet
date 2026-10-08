@@ -17,8 +17,8 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | Proactive assistance | Ask in chat for reminders and a daily morning briefing |
 | Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
 | Projects | Ask in chat or use the Projects button to create a topic-scoped thread |
-| Agent browser | Ask in chat for Web work; Harklet can start a per-user Quicksand Linux VM and report the result. `/computer view|watch|stop` controls the viewer and session; [setup and limits](docs/browser-agent.md) |
-| Live screen | A read-only noVNC link is sent by DM when browser work starts; `/computer watch` shows it privately. The link works only on the Bot's computer. |
+| Agent browser | Ask in chat for Web work; Harklet starts a per-user Quicksand Linux VM and reports the result. `/stop` saves and closes it; [setup and limits](docs/browser-agent.md) |
+| Live screen | A read-only noVNC link is sent by DM when browser work starts. With cloudflared installed, it opens over HTTPS from a phone or another network. |
 
 Gmail and GitHub are currently reachable only as websites in the agent browser after sign-in. Native account connectors and OAuth are not implemented. The GitHub Home card uses a separate token setting for a summary and does not give the chat agent GitHub API access.
 
@@ -63,7 +63,7 @@ For everyday use, write in the chat channel created by `/main set`, DM Harklet, 
 | `/main set|off|show` | Set the main channel (plain messages = chat). `set` also creates a **Harklet** category with chat/home/projects channels (needs Manage Channels; Manage Server required) |
 | `/memory list|forget|clear` | List / delete memories |
 | `/home open|cards|off` | Place/manage custom cards/remove the Home dashboard (auto-refresh every 30 min). AI can offer an Add to Home button that creates dynamic cards |
-| `/computer view|watch|stop` | Inspect or stop a browser task started from chat |
+| `/stop` | Stop browser work and save the VM |
 
 ## LLM backend
 

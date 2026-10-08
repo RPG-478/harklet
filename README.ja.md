@@ -2,9 +2,9 @@
 
 # harklet
 
-普段のチャットでWeb作業を頼むと、Agentが必要に応じてユーザー専用のQuicksand Linux VM内でブラウザを操作します。Dockerは不要です。`/computer` は画面の確認と停止に使います。導入方法と権限の範囲は[専用ブラウザの説明](docs/browser-agent.md)を参照してください。
+普段のチャットでWeb作業を頼むと、Agentが必要に応じてユーザー専用のQuicksand Linux VM内でブラウザを操作します。Dockerは不要です。停止は`/stop`。導入方法と権限の範囲は[専用ブラウザの説明](docs/browser-agent.md)を参照してください。
 
-作業中のライブ画面は本人へのDMに届くURL、または`/computer watch`で見られます。Botと同じPCからだけ開ける閲覧専用noVNCです。
+作業開始時に閲覧専用noVNCのURLを本人のDMへ送ります。cloudflaredを導入するとスマホや別ネットワークからHTTPSで見られます。
 
 **Languages:** [English](./README.md) | 日本語 | [中文](./README.zh.md)
 
@@ -64,7 +64,7 @@ npm start
 | `/main set|off|show` | メインチャンネル設定。`set` で Harklet カテゴリ(chat/home/projects)も自動生成（要「サーバー管理」+Botに「チャンネル管理」） |
 | `/memory list|forget|clear` | 記憶の一覧・削除 |
 | `/home open|cards|off` | Home設置/カスタムカード管理/解除(30分ごと自動更新・更新ボタンあり)。AI提案の「ホームに追加」ボタンで動的カードが増える |
-| `/computer view|watch|stop` | チャットから始めたブラウザ作業の画面確認・停止 |
+| `/stop` | ブラウザ作業を止め、VMの状態を保存 |
 
 ## LLM バックエンド
 

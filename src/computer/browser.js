@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import { createServer } from 'node:net';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { startRemoteViewer } from './viewer-tunnel.js';
 
 const root = resolve(process.env.HARKLET_BROWSER_DATA_DIR || 'browser-data');
 const sessions = new Map();
@@ -136,7 +137,12 @@ async function createSession(userId) {
     }
     const first = context.pages()[0] || await context.newPage();
     await first.setViewportSize({ width: 1280, height: 800 });
-    sessions.set(id, { context, page: first, elements: [], vm, remote });
+    let viewerTunnel = null;
+    if (vm?.viewerReady && process.env.HARKLET_REMOTE_VIEWER !== '0') {
+      try { viewerTunnel = await startRemoteViewer(vm.viewerPort); }
+      catch (err) { console.warn('Remote viewer unavailable:', err.message); }
+    }
+    sessions.set(id, { context, page: first, elements: [], vm, remote, viewerTunnel });
     return { id, width: 1280, height: 800 };
   } catch (err) {
     await remote?.close().catch(() => {});
@@ -164,6 +170,7 @@ async function destroySession(id) {
   const s = sessions.get(id);
   if (!s) return;
   sessions.delete(id);
+  s.viewerTunnel?.close();
   if (s.vm) {
     const cdp = await s.context.newCDPSession(page(s)).catch(() => null);
     await cdp?.send('Browser.close').catch(() => {});
@@ -270,8 +277,12 @@ async function showDiscordPrompt(id) {
 }
 
 function viewerUrl(id) {
-  const vm = session(id).vm;
+  const s = session(id);
+  if (s.viewerTunnel) return s.viewerTunnel.url;
+  const vm = s.vm;
   return vm?.viewerReady ? `http://127.0.0.1:${vm.viewerPort}/vnc.html?autoconnect=true&view_only=true` : null;
 }
 
-export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl, showDiscordPrompt };
+function remoteViewer(id) { return !!session(id).viewerTunnel; }
+
+export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl, remoteViewer, showDiscordPrompt };
