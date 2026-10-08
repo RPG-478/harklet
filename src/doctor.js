@@ -5,10 +5,12 @@ const check = (name, pass, extra = '') => {
   console.log(`${pass ? 'OK' : 'NG'} ${name} ${extra}`);
   if (!pass) ok = false;
 };
+const warn = (name, extra = '') => console.log(`-- ${name} ${extra}`);
 
 check('DISCORD_TOKEN', !!config.discordToken);
 check('DISCORD_CLIENT_ID', !!config.clientId);
-check('OPENAI_API_KEY', !!config.openai.apiKey, config.openai.apiKey ? '' : '(未設定だとLLM機能は応答不可)');
+if (config.openai.apiKey) check('OPENAI_API_KEY', true);
+else warn('OPENAI_API_KEY', '(未設定: /ask・パネル会話・ブリーフ生成は応答不可。他は動作)');
 
 // Discord token check
 try {
@@ -38,5 +40,4 @@ try {
   check('SQLite (node:sqlite)', true, config.dbPath);
 } catch (e) { check('SQLite (node:sqlite)', false, e.message); }
 
-process.exit(ok ? 0 : 1);
-
+process.exitCode = ok ? 0 : 1;

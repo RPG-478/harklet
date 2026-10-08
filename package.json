@@ -5,9 +5,9 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "register": "node src/register.js",
-    "doctor": "node src/doctor.js"
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "register": "node --env-file-if-exists=.env src/register.js",
+    "doctor": "node --env-file-if-exists=.env src/doctor.js"
   },
   "engines": {
     "node": ">=22.5"
@@ -17,4 +17,3 @@
     "discord.js": "^14.27.0"
   }
 }
-

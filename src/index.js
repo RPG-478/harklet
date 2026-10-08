@@ -7,14 +7,17 @@ import { store } from './db.js';
 import { chat } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
 
-const client = new Client({
-  intents: [
+function makeClient(withContent) {
+  const intents = [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent, // パネル内の自由会話用。1万ユーザー超で審査対象。
     GatewayIntentBits.DirectMessages,
-  ],
-});
+  ];
+  if (withContent) intents.push(GatewayIntentBits.MessageContent);
+  return new Client({ intents });
+}
+
+let client = makeClient(true);
 
 // ---------- helpers ----------
 
@@ -222,6 +225,8 @@ async function sendBriefs() {
 
 // ---------- events ----------
 
+function attachEvents(client) {
+
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
@@ -267,5 +272,24 @@ client.once('clientReady', () => {
   setInterval(sendBriefs, 30_000).unref();
 });
 
-client.login(config.discordToken);
+}
 
+attachEvents(client);
+
+// MessageContent Intent がPortalで未許可なら、パネル会話なしモードで再起動する
+async function login(withContent) {
+  try {
+    await client.login(config.discordToken);
+  } catch (e) {
+    if (withContent && String(e).includes('disallowed intents')) {
+      console.error('[Harklet] Message Content Intent not allowed -> retrying without it. Panel free-chat will be disabled. To enable: Developer Portal -> Bot -> Privileged Gateway Intents -> MESSAGE CONTENT INTENT.');
+      client = makeClient(false);
+      attachEvents(client);
+      return login(false);
+    }
+    console.error(e);
+    process.exitCode = 1;
+  }
+}
+
+await login(true);
