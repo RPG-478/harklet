@@ -20,7 +20,7 @@ test('viewer gateway requires the private link for HTTP and WebSocket', { timeou
     assert.equal((await fetch(base + '/open?key=wrong', { redirect: 'manual' })).status, 403);
     const opened = await fetch(base + '/open?key=' + gateway.token, { redirect: 'manual' });
     assert.equal(opened.status, 302);
-    assert.equal(opened.headers.get('location'), '/vnc.html?autoconnect=true&view_only=true');
+    assert.equal(opened.headers.get('location'), '/vnc.html?autoconnect=true&view_only=true&resize=scale');
     const cookie = opened.headers.get('set-cookie').split(';')[0];
     assert.match(opened.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Lax/);
     assert.equal((await fetch(base + '/vnc.html', { headers: { cookie } })).status, 200);
@@ -46,3 +46,26 @@ function upgrade(port, cookie = '') {
     socket.on('data', chunk => { resolve(chunk.toString()); socket.destroy(); });
   });
 }
+
+test('viewer gateway retries transient noVNC asset connection failures', { timeout: 10000 }, async () => {
+  let attempts = 0;
+  const upstream = createServer((_req, res) => {
+    attempts++;
+    if (attempts < 3) { res.destroy(); return; }
+    res.end('loaded');
+  });
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const gateway = await startViewerGateway(upstream.address().port);
+  try {
+    const base = `http://127.0.0.1:${gateway.port}`;
+    const opened = await fetch(base + '/open?key=' + gateway.token, { redirect: 'manual' });
+    const cookie = opened.headers.get('set-cookie').split(';')[0];
+    const asset = await fetch(base + '/core/rfb.js', { headers: { cookie } });
+    assert.equal(asset.status, 200);
+    assert.equal(await asset.text(), 'loaded');
+    assert.equal(attempts, 3);
+  } finally {
+    gateway.close();
+    await new Promise(resolve => upstream.close(resolve));
+  }
+});

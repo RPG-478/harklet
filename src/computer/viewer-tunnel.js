@@ -22,22 +22,35 @@ export async function startViewerGateway(viewerPort) {
   const forward = (req, res) => {
     const headers = { ...req.headers, host: `127.0.0.1:${viewerPort}` };
     delete headers.cookie;
-    const upstream = httpRequest({ hostname: '127.0.0.1', port: viewerPort,
-      path: req.url, method: req.method, headers }, response => {
-      res.writeHead(response.statusCode, {
-        ...response.headers, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
-        'x-frame-options': 'DENY',
+    let attempt = 0;
+    const send = () => {
+      attempt++;
+      const upstream = httpRequest({ hostname: '127.0.0.1', port: viewerPort,
+        path: req.url, method: req.method, headers }, response => {
+        res.writeHead(response.statusCode, {
+          ...response.headers, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
+          'x-frame-options': 'DENY',
+        });
+        response.pipe(res);
       });
-      response.pipe(res);
-    });
-    upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
-    req.pipe(upstream);
+      upstream.on('error', () => {
+        if (['GET', 'HEAD'].includes(req.method) && attempt < 4 && !res.headersSent && !res.writableEnded) {
+          setTimeout(send, 120 * attempt);
+          return;
+        }
+        if (!res.headersSent) res.writeHead(502);
+        res.end();
+      });
+      if (['GET', 'HEAD'].includes(req.method)) upstream.end();
+      else req.pipe(upstream);
+    };
+    send();
   };
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/open' && equalSecret(url.searchParams.get('key'), token)) {
       res.writeHead(302, {
-        location: '/vnc.html?autoconnect=true&view_only=true',
+        location: '/vnc.html?autoconnect=true&view_only=true&resize=scale',
         'set-cookie': `${COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/`,
         'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
       });
@@ -55,18 +68,27 @@ export async function startViewerGateway(viewerPort) {
     if (!authorized(req)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
     const headers = { ...req.headers, host: `127.0.0.1:${viewerPort}` };
     delete headers.cookie;
-    const upstream = httpRequest({ hostname: '127.0.0.1', port: viewerPort,
-      path: req.url, method: req.method, headers });
-    upstream.on('upgrade', (response, upstreamSocket, upstreamHead) => {
-      socket.write(`HTTP/1.1 101 Switching Protocols\r\n${Object.entries(response.headers)
-        .map(([name, value]) => `${name}: ${value}`).join('\r\n')}\r\n\r\n`);
-      if (upstreamHead.length) socket.write(upstreamHead);
-      if (head.length) upstreamSocket.write(head);
-      socket.pipe(upstreamSocket).pipe(socket);
-    });
-    upstream.on('error', () => socket.destroy());
-    socket.on('error', () => upstream.destroy());
-    upstream.end();
+    let upstream, attempt = 0;
+    socket.on('error', () => upstream?.destroy());
+    const connect = () => {
+      if (socket.destroyed) return;
+      attempt++;
+      upstream = httpRequest({ hostname: '127.0.0.1', port: viewerPort,
+        path: req.url, method: req.method, headers });
+      upstream.on('upgrade', (response, upstreamSocket, upstreamHead) => {
+        socket.write(`HTTP/1.1 101 Switching Protocols\r\n${Object.entries(response.headers)
+          .map(([name, value]) => `${name}: ${value}`).join('\r\n')}\r\n\r\n`);
+        if (upstreamHead.length) socket.write(upstreamHead);
+        if (head.length) upstreamSocket.write(head);
+        socket.pipe(upstreamSocket).pipe(socket);
+      });
+      upstream.on('error', () => {
+        if (attempt < 4 && !socket.destroyed) setTimeout(connect, 120 * attempt);
+        else socket.destroy();
+      });
+      upstream.end();
+    };
+    connect();
   });
   try {
     await new Promise((resolve, reject) => {

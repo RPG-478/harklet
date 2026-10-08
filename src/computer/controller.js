@@ -6,6 +6,7 @@ import { makeDecider } from './vision.js';
 import { runComputerTask } from './loop.js';
 import { secretRequestPayload, secretModal } from './ui.js';
 import { retrying, retryingBrowser } from './retry.js';
+import { SessionSecrets } from './session-secrets.js';
 
 const IDLE_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
@@ -106,8 +107,9 @@ async function runTask(userId, s, task, abort, channel, post, onDone) {
       sessionId: s.id,
       browser: retryingBrowser(browser),
       vault: {
-        listSecretNames: id => vault.listSecretNames(id, browser.origin(s.id)),
-        getSecret: (id, name) => vault.getSecret(id, name, browser.origin(s.id)),
+        listSecretNames: () => s.secrets.names(),
+        getSecret: (_id, name) => s.secrets.get(name),
+        takeSecret: (_id, name) => s.secrets.take(name),
       },
       decide: retrying(makeDecider({
         provider: config.llm.provider,
@@ -150,6 +152,7 @@ async function ensureSession(userId) {
   }
   const created = await browser.createSession(userId);
   const s = { id: created.id, idleTimer: null };
+  s.secrets = new SessionSecrets(vault, userId, () => browser.origin(s.id));
   sessions.set(userId, s);
   bumpIdle(userId);
   return s;
@@ -174,6 +177,7 @@ async function destroySession(userId) {
   if (!s) return;
   sessions.delete(userId);
   clearTimeout(s.idleTimer);
+  s.secrets.clear();
   await browser.destroySession(s.id);
 }
 
@@ -233,7 +237,13 @@ async function handleSecretModal(interaction) {
   if (!req || req.userId !== interaction.user.id) throw new Error('この入力依頼は無効です');
   const values = req.fields.map(f => ({ name: f.name, value: interaction.fields.getTextInputValue(f.name) }));
   if (values.some(v => !v.value)) throw new Error('空欄があります。もう一度入力してください');
-  for (const v of values) vault.setSecret(req.userId, v.name, v.value, req.origin);
+  const s = sessions.get(req.userId);
+  if (!s) throw new Error('ブラウザセッションが終了しました');
+  for (const v of values) {
+    const field = req.fields.find(f => f.name === v.name);
+    if (field?.one_time) s.secrets.setOneTime(v.name, v.value, req.origin);
+    else vault.setSecret(req.userId, v.name, v.value, req.origin);
+  }
   clearTimeout(req.timer);
   pending.delete(reqId);
   req.resolve(values.map(v => v.name));

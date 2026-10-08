@@ -280,7 +280,7 @@ function viewerUrl(id) {
   const s = session(id);
   if (s.viewerTunnel) return s.viewerTunnel.url;
   const vm = s.vm;
-  return vm?.viewerReady ? `http://127.0.0.1:${vm.viewerPort}/vnc.html?autoconnect=true&view_only=true` : null;
+  return vm?.viewerReady ? `http://127.0.0.1:${vm.viewerPort}/vnc.html?autoconnect=true&view_only=true&resize=scale` : null;
 }
 
 function remoteViewer(id) { return !!session(id).viewerTunnel; }

@@ -1,4 +1,4 @@
-import { isSecretName } from './names.js';
+import { isSecretName, isOneTimeSecretField } from './names.js';
 
 const KEY_RE = /^[a-zA-Z0-9_+]{1,20}$/;
 const TYPES = new Set(['click', 'double_click', 'right_click', 'move', 'scroll', 'type', 'type_secret',
@@ -70,7 +70,11 @@ export function parseAction(raw, { width, height, elementCount = 0 }) {
         && fields.every(f => f && isSecretName(f.name) && typeof f.label === 'string' && f.label.length >= 1 && f.label.length <= 40);
       if (!ok) return bad('request_secrets needs 1-4 fields, each with name and label');
       const message = typeof raw.message === 'string' ? raw.message.slice(0, 300) : 'ログイン情報を入力してください';
-      return good({ action: t, message, fields: fields.map(f => ({ name: f.name, label: f.label })) });
+      return good({ action: t, message, fields: fields.map(f => ({
+        name: f.name,
+        label: f.label,
+        one_time: isOneTimeSecretField(f),
+      })) });
     }
     case 'done':
       return good({ action: t, summary: String(raw.summary ?? '').slice(0, 500) });

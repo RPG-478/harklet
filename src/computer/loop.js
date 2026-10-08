@@ -158,7 +158,7 @@ export async function runComputerTask(opts) {
       note(step + '. ログイン情報を保存 (' + saved.join(', ') + ', 値は非表示)');
     } else if (a.action === 'type_secret') {
       try {
-        const value = vault.getSecret(userId, a.name);
+        const value = vault.takeSecret ? vault.takeSecret(userId, a.name) : vault.getSecret(userId, a.name);
         if (value === null) {
           note(step + '. type_secret ' + a.name + ' は未保存のため失敗');
         } else {

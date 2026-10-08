@@ -8,7 +8,9 @@ export function secretRequestPayload(reqId, message, fields, origin = '') {
     .addFields({ name: '入力する項目', value: fields.map(f => '・' + f.label).join(' / ') },
       { name: '使用するサイト', value: origin || '未指定' })
     .setColor(0xfaa61a)
-    .setFooter({ text: '入力値は暗号化して保存し、AIには渡しません。依頼した本人だけが押せます' });
+    .setFooter({ text: fields.some(f => f.one_time)
+      ? '認証コードは保存せず一時利用。その他の値は暗号化保存し、AIには渡しません'
+      : '入力値は暗号化して保存し、AIには渡しません。依頼した本人だけが押せます' });
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('cu_secret:' + reqId).setLabel('入力する').setStyle(ButtonStyle.Primary),
   );
