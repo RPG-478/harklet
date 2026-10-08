@@ -32,6 +32,12 @@ test('dedicated browser can navigate, see, click, type and keep its own origin',
     assert.equal(browser.origin(id), origin);
     const shot = await browser.screenshot(id);
     assert.ok(shot.png_base64.length > 100);
+    const dismissPrompt = await browser.showDiscordPrompt(id);
+    const waitingShot = await browser.screenshot(id);
+    assert.notEqual(waitingShot.png_base64, shot.png_base64, 'Discord notice should cover the browser view');
+    await dismissPrompt();
+    const restoredShot = await browser.screenshot(id);
+    assert.equal(restoredShot.png_base64, shot.png_base64, 'browser view should return after input');
     const listed = await browser.elements(id);
     const button = listed.elements.find(e => e.label === 'Open');
     const input = listed.elements.find(e => e.label === 'Name');

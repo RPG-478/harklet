@@ -17,6 +17,8 @@ Set `HARKLET_SECRET_KEY` in `.env` to a private random string of at least 16 cha
 
 When a VM starts, Harklet sends the user a DM with a noVNC URL. The URL opens only on the same computer as the Bot (`127.0.0.1`); it does not work from a phone or another computer. The VM runs its VNC server in read-only mode, so the viewer cannot interact with the desktop. The forwarded noVNC service has no authentication beyond its loopback binding: other local processes on that computer can see the screen. The URL stops working when the VM closes. Login screens and other sensitive page content may be visible in the viewer.
 
+When the Agent needs login details, the browser view displays a prompt to return to Discord. Enter the requested values through the Discord modal. The prompt disappears when the request is answered, times out, or the session is stopped.
+
 Websites such as Gmail and GitHub require sign-in inside the VM. There are no native Gmail or GitHub account connectors yet. The chat agent delegates browser tasks to a separate vision loop; it cannot switch among native service tools during a single run.
 
 VM saves live in `./browser-data/quicksand/sandboxes/`, with names derived from a hash of the Discord user ID. Set `HARKLET_BROWSER_DATA_DIR` to move them. Protect this directory: the saved guest browser contains website cookies and downloaded files. Earlier local Playwright profiles are not migrated into the VM, so users must sign in again once. Login values in Harklet's database remain encrypted and bound to the HTTPS origin where they were entered.
@@ -36,3 +38,5 @@ VM saves live in `./browser-data/quicksand/sandboxes/`, with names derived from 
 標準設定では、`/computer` はDiscordユーザーごとにQuicksandのLinux VMを起動し、その中のChromiumを操作します。Docker Desktopは不要ですが、Python 3.11以上と初回のVM画像ダウンロードが必要です。`npm run browser:install` で導入できます。ログイン状態はVMのディスクに保存されます。以前のホストブラウザのログイン状態は引き継がれず、初回だけ再ログインが必要です。
 
 VMにはホストのフォルダを共有しません。Web閲覧用にネットワークを開くため、ホストやLANへの通信を完全には遮断できません。作業開始時には本人のDMへnoVNCのURLを送り、`/computer watch`からも確認できます。URLはBotと同じPCの`127.0.0.1`でのみ開けます。VNC側は閲覧専用で、VM内の手動MFA操作には対応していません。同じPC上の別プロセスも画面を見られる可能性があります。
+
+Agentがログイン情報を求めたときは、ブラウザ画面にDiscordへ戻る案内を表示します。Discordのモーダルに入力すると案内が消え、作業が再開します。入力期限切れや `/computer stop` でも案内を解除します。

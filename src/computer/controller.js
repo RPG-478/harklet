@@ -210,31 +210,42 @@ async function stopRun(interaction) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const userId = interaction.user.id;
   running.get(userId)?.abort();
+  for (const [reqId, req] of pending) {
+    if (req.userId !== userId) continue;
+    clearTimeout(req.timer);
+    pending.delete(reqId);
+    req.resolve(null);
+  }
   const had = sessions.has(userId);
   await destroySession(userId);
   await interaction.editReply(had ? '画面を閉じて状態を保存しました' : '作業用の画面はありません');
 }
 
-function requestSecrets(userId, sessionId, channel, message, fields) {
+async function requestSecrets(userId, sessionId, channel, message, fields) {
   const reqId = Date.now().toString(36) + '-' + (++seq).toString(36);
   const origin = browser.origin(sessionId);
-  if (!origin?.startsWith('https://')) return Promise.reject(new Error('ログイン情報はHTTPSのサイトにのみ保存できます'));
-  return new Promise(resolve => {
-    if (!channel) {
-      resolve(null);
-      return;
-    }
-    const timer = setTimeout(() => {
-      pending.delete(reqId);
-      resolve(null);
-    }, REQUEST_TIMEOUT_MS);
-    pending.set(reqId, { userId, fields, origin, timer, resolve });
-    Promise.resolve(channel.send(secretRequestPayload(reqId, message, fields, origin))).catch(() => {
-      clearTimeout(timer);
-      pending.delete(reqId);
-      resolve(null);
+  if (!origin?.startsWith('https://')) throw new Error('ログイン情報はHTTPSのサイトにのみ保存できます');
+  const dismiss = await browser.showDiscordPrompt(sessionId).catch(() => null);
+  try {
+    return await new Promise(resolve => {
+      if (!channel) {
+        resolve(null);
+        return;
+      }
+      const timer = setTimeout(() => {
+        pending.delete(reqId);
+        resolve(null);
+      }, REQUEST_TIMEOUT_MS);
+      pending.set(reqId, { userId, fields, origin, timer, resolve });
+      Promise.resolve(channel.send(secretRequestPayload(reqId, message, fields, origin))).catch(() => {
+        clearTimeout(timer);
+        pending.delete(reqId);
+        resolve(null);
+      });
     });
-  });
+  } finally {
+    await dismiss?.();
+  }
 }
 
 async function handleSecretButton(interaction) {

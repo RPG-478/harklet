@@ -245,9 +245,33 @@ async function act(id, action) {
 
 function origin(id) { return httpOrigin(page(session(id)).url()); }
 
+const DISCORD_NOTICE_ID = 'harklet-discord-login-notice';
+
+async function showDiscordPrompt(id) {
+  const target = page(session(id));
+  await target.evaluate(noticeId => {
+    document.getElementById(noticeId)?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = noticeId;
+    overlay.setAttribute('role', 'status');
+    overlay.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;' +
+      'display:flex;align-items:center;justify-content:center;background:rgba(8,12,24,.88);' +
+      'color:white;font:700 30px system-ui,sans-serif;text-align:center;line-height:1.5;';
+    const message = document.createElement('div');
+    message.textContent = '🔐 Discordに戻ってログイン情報を入力してください\nReturn to Discord to enter login details';
+    message.style.cssText = 'white-space:pre-line;max-width:80%;padding:32px;' +
+      'background:#192641;border:2px solid #84b6ff;border-radius:16px;';
+    overlay.append(message);
+    (document.body || document.documentElement).append(overlay);
+  }, DISCORD_NOTICE_ID);
+  return async () => {
+    await target.evaluate(noticeId => document.getElementById(noticeId)?.remove(), DISCORD_NOTICE_ID).catch(() => {});
+  };
+}
+
 function viewerUrl(id) {
   const vm = session(id).vm;
   return vm?.viewerReady ? `http://127.0.0.1:${vm.viewerPort}/vnc.html?autoconnect=true&view_only=true` : null;
 }
 
-export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl };
+export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl, showDiscordPrompt };
