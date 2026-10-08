@@ -57,14 +57,15 @@ async function handleCommand(interaction) {
   const sub = interaction.options.getSubcommand();
   if (sub === 'run') return startRun(interaction, interaction.options.getString('task', true));
   if (sub === 'view') return showViewer(interaction);
+  if (sub === 'watch') return showLiveViewer(interaction);
   if (sub === 'stop') return stopRun(interaction);
 }
 
 async function startRun(interaction, task) {
   const userId = interaction.user.id;
   await interaction.deferReply({ flags: EPHEMERAL });
-  await startComputerTask({ userId, task, channel: interaction.channel });
-  await interaction.editReply('作業を開始しました。進み具合はこのチャンネルに出します。');
+  const status = await startComputerTask({ userId, task, channel: interaction.channel });
+  await interaction.editReply(status);
 }
 
 // The chat agent and /computer share one user slot, session and credential flow.
@@ -86,8 +87,20 @@ export async function startComputerTask({ userId, task, channel, post: customPos
   }
   const post = customPost ?? (text => channel?.send(text).catch(() => {}));
   await post('🖥️ <@' + userId + '> の作業を開始します: ' + task.slice(0, 200));
+  const viewer = browser.viewerUrl(s.id);
+  let sentViewer = false;
+  if (viewer) {
+    // Never put the live screen link into a public guild channel.
+    const notice = `🖥️ 作業中の画面を見る（このBotと同じPCのみ）: ${viewer}\nVNCからの入力は無効です。画面にはログイン中の内容も映ります。`;
+    try {
+      const user = await channel?.client?.users?.fetch(userId);
+      if (user) { await user.send(notice); sentViewer = true; }
+    } catch {}
+  }
   void runTask(userId, s, task, abort, channel, post, onDone);
-  return '🖥️ ブラウザ作業を開始しました。完了したら結果をお知らせします。';
+  return '🖥️ ブラウザ作業を開始しました。完了したら結果をお知らせします。' +
+    (sentViewer ? '\n同じPCで開ける画面URLをDMへ送りました。/computer watch でも確認できます。'
+      : viewer ? '\n画面URLは /computer watch で確認できます。' : '');
 }
 
 async function runTask(userId, s, task, abort, channel, post, onDone) {
@@ -181,6 +194,16 @@ async function showViewer(interaction) {
   const shot = await browser.screenshot(s.id);
   bumpIdle(userId);
   await interaction.editReply(viewerPayload(Buffer.from(shot.png_base64, 'base64')));
+}
+
+async function showLiveViewer(interaction) {
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const s = sessions.get(interaction.user.id);
+  if (!s) return interaction.editReply('作業用の画面がありません。チャットか /computer run で開始してください');
+  const url = browser.viewerUrl(s.id);
+  if (!url) return interaction.editReply('このブラウザではライブ画面を利用できません。/computer view で静止画を確認してください');
+  bumpIdle(interaction.user.id);
+  return interaction.editReply(`🖥️ 作業中の画面（このBotと同じPCのみ）: ${url}\nVNCからの入力は無効です。画面にはログイン中の内容も映ります。`);
 }
 
 async function stopRun(interaction) {

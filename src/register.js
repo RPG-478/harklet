@@ -56,6 +56,7 @@ const commands = [
     .addSubcommand(s => s.setName('run').setDescription('作業を依頼する')
       .addStringOption(o => o.setName('task').setDescription('やってほしいこと').setRequired(true)))
     .addSubcommand(s => s.setName('view').setDescription('作業中の画面を見る（本人だけに表示）'))
+    .addSubcommand(s => s.setName('watch').setDescription('作業中のライブ画面URLを見る（Botと同じPC）'))
     .addSubcommand(s => s.setName('stop').setDescription('作業を止めて画面を破棄')),
 ];
 

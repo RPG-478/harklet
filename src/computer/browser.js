@@ -20,12 +20,12 @@ async function freePort() {
   return port;
 }
 
-function startVm(userHash, port) {
+function startVm(userHash, port, viewerPort) {
   return new Promise((resolveStart, rejectStart) => {
     const venvPython = resolve('sidecar', '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
     const python = process.env.HARKLET_PYTHON || (existsSync(venvPython) ? venvPython : (process.platform === 'win32' ? 'py' : 'python3'));
     const script = resolve('sidecar/quicksand_session.py');
-    const child = spawn(python, ['-u', script, userHash, String(port), root], {
+    const child = spawn(python, ['-u', script, userHash, String(port), root, String(viewerPort)], {
       cwd: resolve(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
     });
     let settled = false;
@@ -49,7 +49,7 @@ function startVm(userHash, port) {
       if (!message.ready || settled) return;
       settled = true;
       clearTimeout(timer);
-      resolveStart({ child, lines, listen: message.listen, getError: () => stderr });
+      resolveStart({ child, lines, listen: message.listen, viewerPort, viewerReady: message.viewer_ready === true, getError: () => stderr });
     });
   });
 }
@@ -110,7 +110,8 @@ async function createSession(userId) {
   try {
     if (provider === 'quicksand') {
       const port = await freePort();
-      vm = await startVm(userHash, port);
+      const viewerPort = await freePort();
+      vm = await startVm(userHash, port, viewerPort);
       try { remote = await connectVm(port); }
       catch (err) { throw new Error(err.message + ' (' + vm.listen + ')'); }
       context = remote.contexts()[0];
@@ -244,4 +245,9 @@ async function act(id, action) {
 
 function origin(id) { return httpOrigin(page(session(id)).url()); }
 
-export const browser = { createSession, destroySession, screenshot, elements, act, origin };
+function viewerUrl(id) {
+  const vm = session(id).vm;
+  return vm?.viewerReady ? `http://127.0.0.1:${vm.viewerPort}/vnc.html?autoconnect=true&view_only=true` : null;
+}
+
+export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl };

@@ -4,6 +4,8 @@
 
 普段のチャットでWeb作業を頼むと、Agentが必要に応じてユーザー専用のQuicksand Linux VM内でブラウザを操作します。Dockerは不要です。`/computer` は直接操作用の補助コマンドです。導入方法と権限の範囲は[専用ブラウザの説明](docs/browser-agent.md)を参照してください。
 
+作業中のライブ画面は本人へのDMに届くURL、または`/computer watch`で見られます。Botと同じPCからだけ開ける閲覧専用noVNCです。
+
 **Languages:** [English](./README.md) | 日本語 | [中文](./README.zh.md)
 
 Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。

@@ -23,6 +23,10 @@ test('Quicksand VM persists browser cookies across restarts',
     let id;
     try {
       ({ id } = await browser.createSession('persistent-user'));
+      const viewer = browser.viewerUrl(id);
+      assert.match(viewer, /^http:\/\/127\.0\.0\.1:\d+\/vnc\.html\?/);
+      const viewerResponse = await fetch(viewer, { signal: AbortSignal.timeout(5000) });
+      assert.equal(viewerResponse.status, 200);
       await browser.act(id, { type: 'navigate', url: base + '/set' });
       await browser.act(id, { type: 'navigate', url: base + '/check' });
       assert.equal((await browser.elements(id)).window.title, 'Cookie kept');

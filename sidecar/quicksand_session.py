@@ -13,6 +13,7 @@ from quicksand_cua import CuaSandbox
 
 async def main():
     name, port, data_dir = sys.argv[1], int(sys.argv[2]), Path(sys.argv[3])
+    viewer_port = int(sys.argv[4]) if len(sys.argv) > 4 else None
     saves = data_dir / "quicksand" / "sandboxes"
     saves.mkdir(parents=True, exist_ok=True)
     pointers = data_dir / "quicksand" / "users"
@@ -26,7 +27,8 @@ async def main():
         memory="2G",
         cpus=2,
         network_mode=NetworkMode.FULL,
-        port_forwards=[PortForward(host=port, guest=9223)],
+        port_forwards=[PortForward(host=port, guest=9223)] +
+            ([PortForward(host=viewer_port, guest=6081)] if viewer_port else []),
     )
     await vm.start()
     try:
@@ -54,6 +56,20 @@ async def main():
             "TCP:127.0.0.1:9222 >/tmp/harklet-cdp-relay.log 2>&1 </dev/null &")
         if relay.exit_code != 0:
             raise RuntimeError(f"CDP relay failed: {relay.stderr}")
+        viewer_ready = False
+        if viewer_port:
+            # The bundled noVNC has no authentication. Enforce read-only at the
+            # VNC server and expose it only through QEMU's loopback host forward.
+            await vm.execute("systemctl stop x11vnc.service")
+            viewonly = await vm.execute("setsid x11vnc -display :0 -forever -shared -viewonly "
+                "-localhost -nopw -rfbport 5901 >/tmp/harklet-vnc.log 2>&1 </dev/null &")
+            if viewonly.exit_code == 0:
+                bridge = await vm.execute("setsid socat TCP-LISTEN:6081,bind=0.0.0.0,reuseaddr,fork "
+                    "TCP:127.0.0.1:6080 >/tmp/harklet-novnc-relay.log 2>&1 </dev/null &")
+                if bridge.exit_code == 0:
+                    probe = await vm.execute("curl -fsS --max-time 2 http://127.0.0.1:6080/vnc.html >/dev/null")
+                    vnc = await vm.execute("ss -ltn | grep -q ':5901 ' && pgrep -af 'x11vnc.*-viewonly' >/dev/null")
+                    viewer_ready = probe.exit_code == 0 and vnc.exit_code == 0
         for _ in range(20):
             probe = await vm.execute("curl -fsS --max-time 2 http://127.0.0.1:9222/json/version")
             if probe.exit_code == 0:
@@ -63,7 +79,8 @@ async def main():
             log = await vm.execute("tail -30 /tmp/harklet-chromium.log")
             raise RuntimeError(f"Chromium CDP did not start: {probe.stderr}; {log.stdout}")
         listen = await vm.execute("ss -ltnp | grep -E '9222|9223' || true")
-        print(json.dumps({"ready": True, "port": port, "listen": listen.stdout.strip()}), flush=True)
+        print(json.dumps({"ready": True, "port": port, "listen": listen.stdout.strip(),
+            "viewer_ready": viewer_ready}), flush=True)
         await asyncio.to_thread(sys.stdin.readline)
         for _ in range(30):
             remaining = await vm.execute("pgrep -x chrome >/dev/null")

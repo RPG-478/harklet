@@ -17,7 +17,8 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | Proactive assistance | Scheduled reminder delivery + daily morning briefing (`/brief`) |
 | Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
 | Projects | `/project` — a topic-scoped thread for splitting a chat by subject (legacy alias: `/panel`) |
-| Agent browser | Ask in chat for Web work; Harklet can start a per-user Quicksand Linux VM and report the result. `/computer run|view|stop` offers direct control; [setup and limits](docs/browser-agent.md) |
+| Agent browser | Ask in chat for Web work; Harklet can start a per-user Quicksand Linux VM and report the result. `/computer run|view|watch|stop` offers direct control; [setup and limits](docs/browser-agent.md) |
+| Live screen | A read-only noVNC link is sent by DM when browser work starts; `/computer watch` shows it privately. The link works only on the Bot's computer. |
 
 Gmail and GitHub are currently reachable only as websites in the agent browser after sign-in. Native account connectors and OAuth are not implemented. The GitHub Home card uses a separate token setting for a summary and does not give the chat agent GitHub API access.
 
