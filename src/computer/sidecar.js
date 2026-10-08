@@ -49,17 +49,21 @@ async function ensureSidecar() {
     });
     child.stderr.on('data', d => { stderrTail = (stderrTail + d.toString()).slice(-2000); });
     child.on('exit', () => { if (proc === child) { proc = null; token = null; } });
+    let spawnError = null;
+    // Without an 'error' listener, a missing Python binary crashes the whole bot.
+    child.on('error', err => { spawnError = err; });
     proc = child;
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
-      if (child.exitCode !== null) break;
+      if (spawnError || child.exitCode !== null) break;
       if (await healthy()) return;
       await new Promise(r => setTimeout(r, 300));
     }
     try { child.kill(); } catch {}
     proc = null;
     token = null;
-    throw new Error('Cuaサイドカーが起動しませんでした: ' + stderrTail.trim().slice(-200));
+    const why = spawnError ? (spawnError.code || spawnError.message) : stderrTail.trim().slice(-200);
+    throw new Error('Cuaサイドカーが起動しませんでした: ' + why);
   })().finally(() => { starting = null; });
   return starting;
 }

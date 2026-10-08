@@ -116,7 +116,13 @@ export function makeDecider({ provider, baseUrl, apiKey, model, fetchImpl = fetc
       body: JSON.stringify(req.body),
       signal: AbortSignal.timeout(120000),
     });
-    if (!res.ok) throw new Error('LLM ' + res.status);
+    if (!res.ok) {
+      // Keep the provider message (for example "image input is not supported"), never the request.
+      const body = await res.json().catch(() => null);
+      const msg = body?.error?.message ?? body?.error ?? '';
+      const detail = typeof msg === 'string' && msg ? ': ' + msg.slice(0, 200) : '';
+      throw new Error('LLM ' + res.status + detail);
+    }
     const data = await res.json();
     return parseJsonObject(extractText(provider, data));
   };
