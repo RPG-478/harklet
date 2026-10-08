@@ -8,7 +8,8 @@
     "start": "node --env-file-if-exists=.env src/index.js",
     "register": "node --env-file-if-exists=.env src/register.js",
     "doctor": "node --env-file-if-exists=.env src/doctor.js",
-    "browser:install": "playwright install chromium"
+    "browser:install": "node scripts/install-quicksand.js",
+    "browser:install:local": "playwright install chromium"
   },
   "engines": {
     "node": ">=22.5"

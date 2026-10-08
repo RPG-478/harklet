@@ -12,6 +12,7 @@ test('dedicated browser can navigate, see, click, type and keep its own origin',
   { skip: !existsSync(chromium.executablePath()) && 'Install Chromium with npm run browser:install' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'harklet-browser-test-'));
   process.env.HARKLET_BROWSER_DATA_DIR = root;
+  process.env.HARKLET_BROWSER_PROVIDER = 'local';
   process.env.HARKLET_BROWSER_HEADLESS = '1';
   process.env.HARKLET_BROWSER_ALLOW_PRIVATE = '1';
   const { browser, privateHost } = await import('../src/computer/browser.js');

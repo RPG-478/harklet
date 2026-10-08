@@ -1,11 +1,75 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { createServer } from 'node:net';
+import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const root = resolve(process.env.HARKLET_BROWSER_DATA_DIR || 'browser-data');
 const sessions = new Map();
 const SELECTOR = 'a,button,input,textarea,select,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
+const provider = process.env.HARKLET_BROWSER_PROVIDER || 'quicksand';
+
+async function freePort() {
+  const server = createServer();
+  await new Promise((resolve, reject) => server.once('error', reject).listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+  await new Promise(resolve => server.close(resolve));
+  return port;
+}
+
+function startVm(userHash, port) {
+  return new Promise((resolveStart, rejectStart) => {
+    const venvPython = resolve('sidecar', '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+    const python = process.env.HARKLET_PYTHON || (existsSync(venvPython) ? venvPython : (process.platform === 'win32' ? 'py' : 'python3'));
+    const script = resolve('sidecar/quicksand_session.py');
+    const child = spawn(python, ['-u', script, userHash, String(port), root], {
+      cwd: resolve(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
+    });
+    let settled = false;
+    let stderr = '';
+    const lines = createInterface({ input: child.stdout });
+    const timer = setTimeout(() => fail(new Error('Quicksand VM の起動がタイムアウトしました')), 180000);
+    child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-4000); });
+    function fail(err) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill();
+      rejectStart(err);
+    }
+    child.on('error', fail);
+    child.on('exit', code => fail(new Error(`Quicksand が終了しました (${code}): ${stderr}`)));
+    lines.on('line', line => {
+      let message;
+      try { message = JSON.parse(line); } catch { return; }
+      if (message.error) { stderr = message.error + '\n' + stderr; return fail(new Error(message.error)); }
+      if (!message.ready || settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolveStart({ child, lines, listen: message.listen, getError: () => stderr });
+    });
+  });
+}
+
+async function connectVm(port) {
+  let last;
+  for (let i = 0; i < 50; i++) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1500) });
+      if (!response.ok) throw new Error('CDP HTTP ' + response.status);
+      const info = await response.json();
+      const endpoint = new URL(info.webSocketDebuggerUrl);
+      endpoint.hostname = '127.0.0.1';
+      endpoint.port = String(port);
+      return await chromium.connectOverCDP(endpoint.toString(), { timeout: 1500 });
+    }
+    catch (err) { last = err; await new Promise(resolve => setTimeout(resolve, 200)); }
+  }
+  throw new Error('VM内のChromiumに接続できません: ' + last?.message);
+}
 
 function session(id) {
   const s = sessions.get(id);
@@ -39,17 +103,27 @@ export function privateHost(hostname) {
 
 async function createSession(userId) {
   const id = randomUUID();
-  const profile = join(root, createHash('sha256').update(String(userId)).digest('hex'));
+  const userHash = createHash('sha256').update(String(userId)).digest('hex');
+  const profile = join(root, userHash);
   await mkdir(profile, { recursive: true });
-  let context;
+  let context, vm, remote;
   try {
-    context = await chromium.launchPersistentContext(profile, {
-      headless: process.env.HARKLET_BROWSER_HEADLESS === '1',
-      viewport: { width: 1280, height: 800 },
-      acceptDownloads: true,
-      downloadsPath: join(profile, 'downloads'),
-      chromiumSandbox: true,
-    });
+    if (provider === 'quicksand') {
+      const port = await freePort();
+      vm = await startVm(userHash, port);
+      try { remote = await connectVm(port); }
+      catch (err) { throw new Error(err.message + ' (' + vm.listen + ')'); }
+      context = remote.contexts()[0];
+      if (!context) throw new Error('VMのブラウザコンテキストが見つかりません');
+    } else if (provider === 'local') {
+      context = await chromium.launchPersistentContext(profile, {
+        headless: process.env.HARKLET_BROWSER_HEADLESS === '1',
+        viewport: { width: 1280, height: 800 },
+        acceptDownloads: true,
+        downloadsPath: join(profile, 'downloads'),
+        chromiumSandbox: true,
+      });
+    } else throw new Error('HARKLET_BROWSER_PROVIDER は quicksand または local を指定してください');
     if (process.env.HARKLET_BROWSER_ALLOW_PRIVATE !== '1') {
       await context.route('**/*', route => {
         try {
@@ -60,24 +134,48 @@ async function createSession(userId) {
       });
     }
     const first = context.pages()[0] || await context.newPage();
-    sessions.set(id, { context, page: first, elements: [] });
+    await first.setViewportSize({ width: 1280, height: 800 });
+    sessions.set(id, { context, page: first, elements: [], vm, remote });
     return { id, width: 1280, height: 800 };
   } catch (err) {
-    await context?.close().catch(() => {});
-    throw new Error('専用ブラウザを起動できません: ' + err.message + '。npm run browser:install を確認してください');
+    await remote?.close().catch(() => {});
+    if (vm) await stopVm(vm).catch(() => {});
+    else await context?.close().catch(() => {});
+    throw new Error('専用ブラウザを起動できません: ' + err.message +
+      (provider === 'quicksand' ? '。Quicksandのセットアップを確認してください' : '。npm run browser:install を確認してください'));
   }
+}
+
+function stopVm(vm) {
+  return new Promise((resolveStop, rejectStop) => {
+    if (vm.child.exitCode !== null) return rejectStop(new Error('VMはすでに終了しています: ' + vm.getError()));
+    const timer = setTimeout(() => { vm.child.kill(); rejectStop(new Error('VM保存がタイムアウトしました')); }, 60000);
+    vm.child.once('exit', code => {
+      clearTimeout(timer);
+      if (code === 0) resolveStop();
+      else rejectStop(new Error('VMの保存に失敗しました: ' + vm.getError()));
+    });
+    vm.child.stdin.end('\n');
+  });
 }
 
 async function destroySession(id) {
   const s = sessions.get(id);
   if (!s) return;
   sessions.delete(id);
-  await s.context.close();
+  if (s.vm) {
+    const cdp = await s.context.newCDPSession(page(s)).catch(() => null);
+    await cdp?.send('Browser.close').catch(() => {});
+    await s.remote.close().catch(() => {});
+    await stopVm(s.vm);
+  } else await s.context.close();
 }
 
 async function screenshot(id) {
-  const png = await page(session(id)).screenshot({ type: 'png', animations: 'disabled', timeout: 15000 });
-  return { png_base64: png.toString('base64'), width: 1280, height: 800 };
+  const p = page(session(id));
+  const png = await p.screenshot({ type: 'png', animations: 'disabled', timeout: 15000 });
+  const viewport = p.viewportSize();
+  return { png_base64: png.toString('base64'), width: viewport?.width || png.readUInt32BE(16), height: viewport?.height || png.readUInt32BE(20) };
 }
 
 async function elements(id) {

@@ -2,7 +2,7 @@
 
 # harklet
 
-`/computer` uses a dedicated browser profile for web tasks and does not require Docker. See [setup and limitations](docs/browser-agent.md).
+`/computer` uses a dedicated Quicksand Linux VM for web tasks and does not require Docker. See [setup and limitations](docs/browser-agent.md).
 
 **Languages:** [English](./README.md) | [日本語](./README.ja.md) | 中文
 

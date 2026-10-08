@@ -145,7 +145,7 @@ function bumpIdle(userId) {
       bumpIdle(userId);
       return;
     }
-    destroySession(userId);
+    destroySession(userId).catch(err => console.error('computer session save failed:', err));
   }, IDLE_MS);
   s.idleTimer.unref?.();
 }
@@ -155,7 +155,7 @@ async function destroySession(userId) {
   if (!s) return;
   sessions.delete(userId);
   clearTimeout(s.idleTimer);
-  await browser.destroySession(s.id).catch(() => {});
+  await browser.destroySession(s.id);
 }
 
 async function showViewer(interaction) {
@@ -177,7 +177,7 @@ async function stopRun(interaction) {
   running.get(userId)?.abort();
   const had = sessions.has(userId);
   await destroySession(userId);
-  await interaction.editReply(had ? '画面を破棄しました' : '作業用の画面はありません');
+  await interaction.editReply(had ? '画面を閉じて状態を保存しました' : '作業用の画面はありません');
 }
 
 function requestSecrets(userId, sessionId, channel, message, fields) {
