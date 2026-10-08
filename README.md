@@ -1,3 +1,5 @@
+![harklet](assets/banner.jpg)
+
 # harklet
 
 Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。
@@ -65,4 +67,3 @@ OpenAI 互換 API なら何でも使えます。`OPENAI_BASE_URL` と `OPENAI_MO
 ## License
 
 MIT
-
