@@ -54,8 +54,9 @@ CREATE TABLE IF NOT EXISTS main_channels (
 );
 `);
 
-// v2: per-user LLM prefs
-for (const col of ['model TEXT', 'effort TEXT']) {
+// v2: per-user LLM prefs / v3: home message anchor
+for (const col of ['model TEXT', 'effort TEXT', 'home_channel_id TEXT', 'home_message_id TEXT',
+  'home_city TEXT', 'home_lat REAL', 'home_lon REAL']) {
   try { db.exec(`ALTER TABLE settings ADD COLUMN ${col}`); } catch { /* exists */ }
 }
 
@@ -88,6 +89,14 @@ const q = {
     ON CONFLICT(user_id) DO UPDATE SET model=excluded.model`),
   setEffort: db.prepare(`INSERT INTO settings (user_id, effort) VALUES (?, ?)
     ON CONFLICT(user_id) DO UPDATE SET effort=excluded.effort`),
+  setHome: db.prepare(`INSERT INTO settings (user_id, home_channel_id, home_message_id) VALUES (?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET home_channel_id=excluded.home_channel_id,
+      home_message_id=excluded.home_message_id`),
+  setHomeCity: db.prepare(`INSERT INTO settings (user_id, home_city, home_lat, home_lon) VALUES (?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET home_city=excluded.home_city,
+      home_lat=excluded.home_lat, home_lon=excluded.home_lon`),
+  clearHome: db.prepare('UPDATE settings SET home_channel_id=NULL, home_message_id=NULL WHERE user_id=?'),
+  homeTargets: db.prepare('SELECT user_id, home_channel_id, home_message_id FROM settings WHERE home_channel_id IS NOT NULL'),
   setMain: db.prepare('INSERT OR REPLACE INTO main_channels (guild_id, channel_id, set_by) VALUES (?, ?, ?)'),
   getMain: db.prepare('SELECT channel_id FROM main_channels WHERE guild_id = ?'),
   clearMain: db.prepare('DELETE FROM main_channels WHERE guild_id = ?'),
@@ -123,6 +132,10 @@ export const store = {
   briefTargets: () => q.briefTargets.all(),
   setModel: (userId, model) => q.setModel.run(userId, model),
   setEffort: (userId, effort) => q.setEffort.run(userId, effort),
+  setHome: (userId, channelId, messageId) => q.setHome.run(userId, channelId, messageId),
+  setHomeCity: (userId, city, lat, lon) => q.setHomeCity.run(userId, city, lat, lon),
+  clearHome: (userId) => q.clearHome.run(userId),
+  homeTargets: () => q.homeTargets.all(),
   setMain: (guildId, channelId, setBy) => q.setMain.run(guildId, channelId, setBy),
   getMain: (guildId) => q.getMain.get(guildId)?.channel_id ?? null,
   clearMain: (guildId) => q.clearMain.run(guildId),

@@ -45,3 +45,10 @@ config.llm = {
   ).replace(/\/+$/, ''),
   model: (env.LLM_MODEL || env.OPENAI_MODEL || PROVIDER_DEFAULTS[provider].model).trim(),
 };
+
+// --- Home dashboard cards ---
+config.home = {
+  city: env.HOME_CITY?.trim() || null,        // 天気カード (Open-Meteo, キー不要)
+  githubUser: env.GITHUB_USER?.trim() || null, // GitHub概要カード
+  githubToken: env.GITHUB_TOKEN?.trim() || null, // 任意: レート制限緩和
+};

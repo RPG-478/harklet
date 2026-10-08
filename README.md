@@ -15,7 +15,8 @@ It brings Hark Pro's core experience — **an assistant with persistent memory, 
 | Chat with memory | `/ask` + per-user long-term memory (SQLite). Key facts are auto-extracted from conversation |
 | Action Buttons | AI replies come with executable buttons such as "set reminder" and "save to memory" |
 | Proactive assistance | Scheduled reminder delivery + daily morning briefing (`/brief`) |
-| Projects | `/panel` — a topic-scoped thread where you can chat freely without commands |
+| Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
+| Projects | `/project` — a topic-scoped thread for splitting a chat by subject (legacy alias: `/panel`) |
 
 ## Setup
 
@@ -55,7 +56,9 @@ If the Message Content intent is not granted, the bot automatically retries with
 | `/remember <text>` | Save a fact to long-term memory |
 | `/memory list|forget|clear` | List / delete memories |
 | `/remind add|list|cancel` | Reminders. Parses `in 10 min`, `tomorrow 9am`, `18:30`, `2026-10-09 09:00`, Japanese (`10分後` `明日9時`), etc. |
-| `/panel <topic>` | Create a conversation panel (thread). Just type inside to keep chatting |
+| `/project <topic>` | Create a project thread to split the chat by subject. Just type inside to keep chatting |
+| `/panel <topic>` | Same as `/project` (kept for compatibility) |
+| `/home open|off` | Place/remove the Home dashboard card message (auto-refresh every 30 min) |
 | `/brief on|off|now` | Configure / trigger the daily briefing |
 | `/ping` | Health check |
 
@@ -74,6 +77,7 @@ Three provider styles are supported; the active one is auto-detected from which 
 ## How it works
 
 - `src/index.js` — Discord events, commands, buttons, schedulers
+- `src/home.js` — Home dashboard: embed cards (today's moves via LLM, Open-Meteo weather, GitHub summary, reminders, memories) edited in place on a 30-min timer and a refresh button
 - `src/dsh-agent.js` — the conversation engine: DeepSeek Harness (DSH) agent loop embedded in-process (cordis plugins → sessions → agent loop), bridged to OpenAI-compatible / Anthropic / Google APIs via a custom `LlmAdapter`. Parses the structured JSON `{reply, actions, remember}` contract
 - `src/llm.js` — model list auto-discovery per provider
 - `src/db.js` — persistence via `node:sqlite` (memories, history, reminders, settings)

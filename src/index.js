@@ -7,6 +7,7 @@ import {
 import { config } from './config.js';
 import { store } from './db.js';
 import { chatDsh, invalidateUserAgents } from './dsh-agent.js';
+import { homePayload, geocodeCity } from './home.js';
 import { listModels } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
 
@@ -226,7 +227,7 @@ const handlers = {
     }
   },
 
-  async panel(i) {
+  async project(i) {
     const topic = i.options.getString('topic', true);
     if (!i.channel || i.channel.type !== ChannelType.GuildText) {
       return i.reply({ content: 'テキストチャンネルで実行してください。', flags: MessageFlags.Ephemeral });
@@ -234,11 +235,35 @@ const handlers = {
     await i.reply(`🗂️ パネルを作成します: **${topic}**\nこのスレッド内はコマンド不要でそのまま会話できます。`);
     const starter = await i.fetchReply();
     const thread = await starter.startThread({
-      name: `panel-${topic.slice(0, 90)}`,
+      name: `pj-${topic.slice(0, 90)}`,
       autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
     });
     store.addPanel(thread.id, i.user.id, topic);
-    await thread.send(`📌 トピック「${topic}」のパネルです。${i.user} との会話をここに記録します。はじめの一言をどうぞ。`);
+    await thread.send(`📁 プロジェクト「${topic}」。${i.user} との会話をここに記録します。はじめの一言をどうぞ。`);
+  },
+
+  panel: (i) => handlers.project(i),
+
+  async home(i) {
+    const sub = i.options.getSubcommand();
+    if (sub === 'off') {
+      store.clearHome(i.user.id);
+      return i.reply({ content: '🏠 Homeを解除しました(自動更新を停止)', flags: MessageFlags.Ephemeral });
+    }
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const payload = await homePayload(i.user.id, actionRows);
+    const prev = store.getSettings(i.user.id);
+    if (prev?.home_message_id) {
+      try {
+        const ch = await client.channels.fetch(prev.home_channel_id);
+        const m = await ch.messages.fetch(prev.home_message_id);
+        await m.edit(payload);
+        return i.editReply('🏠 Homeを更新しました');
+      } catch { /* 消えていた等→新規投稿へ */ }
+    }
+    const msg = await i.channel.send(payload);
+    store.setHome(i.user.id, i.channelId, msg.id);
+    return i.editReply('🏠 Homeを設置しました。30分ごとに自動更新・「更新」ボタンで即時更新できます');
   },
 
   async brief(i) {
@@ -314,6 +339,19 @@ async function sendBriefs() {
   }
 }
 
+async function refreshHomes() {
+  for (const t of store.homeTargets()) {
+    try {
+      const ch = await client.channels.fetch(t.home_channel_id).catch(() => null);
+      const m = await ch?.messages?.fetch(t.home_message_id).catch(() => null);
+      if (!m) { store.clearHome(t.user_id); continue; }
+      await m.edit(await homePayload(t.user_id, actionRows));
+    } catch (e) {
+      console.error(`home refresh ${t.user_id} failed:`, e.message);
+    }
+  }
+}
+
 // ---------- events ----------
 
 async function replyWithPlaceholder(message, scope, text = message.content) {
@@ -372,10 +410,51 @@ client.on('interactionCreate', async (interaction) => {
       store.setEffort(uid, null);
       await invalidateUserAgents(uid);
       await interaction.update(await modelPanel(uid));
+    } else if (interaction.isButton() && interaction.customId === 'home_refresh') {
+      await interaction.deferUpdate();
+      try { await interaction.message.edit(await homePayload(interaction.user.id, actionRows)); } catch {}
+    } else if (interaction.isButton() && interaction.customId === 'home_region') {
+      const modal = new ModalBuilder().setCustomId('home_region_modal').setTitle('地域を設定');
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('region_city')
+          .setLabel('地名(例: 浦和 / Urawa / さいたま市)')
+          .setStyle(TextInputStyle.Short).setRequired(true),
+      ));
+      await interaction.showModal(modal);
+    } else if (interaction.isButton() && interaction.customId === 'home_newproj') {
+      const modal = new ModalBuilder().setCustomId('home_proj_modal').setTitle('プロジェクト作成');
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('proj_topic')
+          .setLabel('トピック(例: C2Bサイト改善)')
+          .setStyle(TextInputStyle.Short).setRequired(true),
+      ));
+      await interaction.showModal(modal);
     } else if (interaction.isModalSubmit() && interaction.customId === 'model_modal') {
       const name = interaction.fields.getTextInputValue('model_name').trim();
       pendingModelSel.set(interaction.user.id, name);
       await interaction.update(await modelPanel(interaction.user.id));
+    } else if (interaction.isModalSubmit() && interaction.customId === 'home_region_modal') {
+      const name = interaction.fields.getTextInputValue('region_city').trim();
+      await interaction.deferUpdate();
+      const p = await geocodeCity(name);
+      if (!p) {
+        await interaction.followUp({ content: `📍 「${name}」が見つかりませんでした。別の表記で試してください`, flags: MessageFlags.Ephemeral });
+      } else {
+        const city = `${p.name}, ${p.country_code ?? ''}`;
+        store.setHomeCity(interaction.user.id, city, p.latitude, p.longitude);
+        await interaction.followUp({ content: `📍 地域を「${city}」に設定しました`, flags: MessageFlags.Ephemeral });
+      }
+      try { await interaction.message.edit(await homePayload(interaction.user.id, actionRows)); } catch {}
+    } else if (interaction.isModalSubmit() && interaction.customId === 'home_proj_modal') {
+      const topic = interaction.fields.getTextInputValue('proj_topic').trim();
+      const base = interaction.message;
+      if (!base?.channel || base.channel.type !== ChannelType.GuildText) {
+        return interaction.reply({ content: 'ギルドのテキストチャンネルにあるHomeメッセージから実行してください', flags: MessageFlags.Ephemeral });
+      }
+      const thread = await base.startThread({ name: `pj-${topic.slice(0, 90)}`, autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek });
+      store.addPanel(thread.id, interaction.user.id, topic);
+      await thread.send(`📁 プロジェクト「${topic}」。${interaction.user} との会話をここに記録します。はじめの一言をどうぞ。`);
+      await interaction.reply({ content: `📁 プロジェクトを作成しました: ${thread}`, flags: MessageFlags.Ephemeral });
     } else if (interaction.isStringSelectMenu()) {
       if (interaction.customId === 'model_sel') {
         pendingModelSel.set(interaction.user.id, interaction.values[0]);
@@ -426,6 +505,7 @@ client.once('clientReady', () => {
   console.log(`Harklet logged in as ${client.user.tag}`);
   setInterval(deliverReminders, 15_000).unref();
   setInterval(sendBriefs, 30_000).unref();
+  setInterval(refreshHomes, 1_800_000).unref();
 });
 
 }

@@ -15,7 +15,8 @@
 | 带记忆的对话 | `/ask` + 每用户长期记忆（SQLite）。自动从对话中提取关键事实 |
 | 操作按钮 | AI 回复附带可执行按钮，如"设置提醒""保存到记忆" |
 | 主动协助 | 定时提醒推送 + 每日晨间简报（`/brief`） |
-| Projects | `/panel` —— 按主题创建对话子区，区内可直接聊天无需命令 |
+| Home | `/home` —— 常驻仪表盘消息：今日行动、天气、GitHub 概要、提醒、记忆卡片，每 30 分钟自动刷新 |
+| Projects | `/project` —— 按主题拆分会话的子区（兼容别名 `/panel`） |
 
 ## 安装
 
@@ -55,7 +56,9 @@ npm start
 | `/remember <text>` | 保存事实到长期记忆 |
 | `/memory list|forget|clear` | 查看 / 删除记忆 |
 | `/remind add|list|cancel` | 提醒。可解析 `10分後` `in 10 min` `tomorrow 9am` `18:30` `2026-10-09 09:00` 等 |
-| `/panel <topic>` | 创建对话面板（子区），区内直接输入即可持续对话 |
+| `/project <topic>` | 创建项目子区以按主题拆分会话，区内直接输入即可持续对话 |
+| `/panel <topic>` | 同 `/project`（兼容保留） |
+| `/home open|off` | 放置/移除 Home 仪表盘消息（每 30 分钟自动刷新，附刷新按钮） |
 | `/brief on|off|now` | 配置 / 手动生成每日简报 |
 | `/ping` | 存活检查 |
 
@@ -74,6 +77,7 @@ npm start
 ## 结构
 
 - `src/index.js` —— Discord 事件、命令、按钮、调度器
+- `src/home.js` —— Home 仪表盘：LLM 生成“今日行动”+Open-Meteo 天气+GitHub 概要+提醒+记忆的 Embed 卡片，30 分钟定时与刷新按钮原地更新
 - `src/dsh-agent.js` —— 对话引擎：将 DeepSeek Harness (DSH) 智能体循环嵌入进程内（cordis 插件 → 会话 → 智能体循环），通过自定义 `LlmAdapter` 桥接 OpenAI 兼容 / Anthropic / Google API，并解析结构化 JSON `{reply, actions, remember}`
 - `src/llm.js` —— 按提供商自动获取模型列表
 - `src/db.js` —— 基于 `node:sqlite` 的持久化（记忆、历史、提醒、设置）

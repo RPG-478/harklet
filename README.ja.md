@@ -15,7 +15,8 @@ Hark Pro(hark.com)の中核体験 — **記憶を持つアシスタント、会�
 | 記憶を持つチャット | `/ask` + ユーザーごとの長期記憶(SQLite)。会話から重要な事実を自動抽出して保存 |
 | Action Buttons | AI の応答に「リマインダー設定」「記憶に保存」などの実行ボタンが付く |
 | プロアクティブ支援 | リマインダー配信 + 毎朝のモーニングブリーフ(`/brief`) |
-| Projects | `/panel` — トピックごとの会話スレッド。パネル内はコマンド不要で自由会話 |
+| Home | `/home` — 常駐ダッシュボード。今日の一手・天気・GitHub概要・予定・記憶をカード表示。30分ごと自動更新 |
+| Projects | `/project` — チャットを話題で分割するスレッド(互換: `/panel`) |
 
 ## セットアップ
 
@@ -53,7 +54,9 @@ npm start
 | `/remember <text>` | 長期記憶に保存 |
 | `/memory list|forget|clear` | 記憶の一覧・削除 |
 | `/remind add|list|cancel` | リマインダー。`10分後` `明日9時` `18:30` `2026-10-09 09:00` `in 10 min` `tomorrow 9am` などを解釈 |
-| `/panel <topic>` | 会話パネル(スレッド)を作成。パネル内は普通に書き込むだけで会話が続く |
+| `/project <topic>` | プロジェクト(話題別スレッド)を作成。内部は書き込むだけで会話が続く |
+| `/panel <topic>` | `/project` と同じ(互換用) |
+| `/home open|off` | Homeダッシュボードを設置/解除(30分ごと自動更新・更新ボタンあり) |
 | `/brief on|off|now` | 毎朝のブリーフィング設定・手動生成 |
 | `/ping` | 生存確認 |
 
@@ -72,6 +75,7 @@ npm start
 ## 仕組み
 
 - `src/index.js` — Discord イベント・コマンド・ボタン・スケジューラ
+- `src/home.js` — Homeダッシュボード。LLM生成「今日の一手」+Open-Meteo天気+GitHub概要+リマインダー+記憶のEmbedカードを30分タイマーと更新ボタンで編集
 - `src/dsh-agent.js` — 会話エンジン。DeepSeek Harness (DSH) のエージェントループをプロセス内に組み込み(cordis プラグイン → セッション → エージェントループ)、独自 `LlmAdapter` で OpenAI互換 / Anthropic / Google 各APIにブリッジ。構造化JSON `{reply, actions, remember}` をパース
 - `src/llm.js` — プロバイダ別のモデル一覧自動取得
 - `src/db.js` — `node:sqlite` による永続化(記憶・会話履歴・リマインダー・設定)

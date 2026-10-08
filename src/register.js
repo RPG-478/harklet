@@ -33,9 +33,16 @@ const commands = [
     .addSubcommand(s => s.setName('list').setDescription('一覧'))
     .addSubcommand(s => s.setName('cancel').setDescription('キャンセル')
       .addIntegerOption(o => o.setName('id').setDescription('リマインダーID').setRequired(true))),
-  new SlashCommandBuilder().setName('panel')
-    .setDescription('会話パネル(スレッド)を作成')
+  new SlashCommandBuilder().setName('project')
+    .setDescription('プロジェクト(話題別スレッド)を作成 — チャットを分割したい時に')
     .addStringOption(o => o.setName('topic').setDescription('トピック').setRequired(true)),
+  new SlashCommandBuilder().setName('panel')
+    .setDescription('(互換) /project と同じ')
+    .addStringOption(o => o.setName('topic').setDescription('トピック').setRequired(true)),
+  new SlashCommandBuilder().setName('home')
+    .setDescription('Harklet Home: 興味ある情報をカードで常駐表示(自動更新)')
+    .addSubcommand(s => s.setName('open').setDescription('Homeを設置/更新'))
+    .addSubcommand(s => s.setName('off').setDescription('Homeを解除(自動更新停止)')),
   new SlashCommandBuilder().setName('brief')
     .setDescription('モーニングブリーフ')
     .addSubcommand(s => s.setName('on').setDescription('毎日送信を有効化')
