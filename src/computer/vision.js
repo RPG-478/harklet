@@ -15,6 +15,7 @@ export const SYSTEM_PROMPT = [
   'key: {"action": "key", "keys": ["ctrl", "a"]}。許可するのは Enter/Tab/Shift+Tab/Escape/Backspace/Delete/Space/矢印/全選択のみ',
   'wait: {"action": "wait", "seconds": 数}。画面の読み込みを待つ',
   'request_secrets: {"action": "request_secrets", "message": "利用者への依頼文", "fields": [{"name": "保存名", "label": "表示名"}]}。ログイン情報が必要で、まだ保存されていない時に使う',
+  'ログイン画面では、保存済みのID・パスワードがなければ request_secrets を選ぶ。Discordモーダルに本人が入力した後、type_secret で各欄へ入力してログインを続ける。ユーザーにブラウザの手動操作を頼んで終了しない。ワンタイムコードが必要ならそれも request_secrets で本人に聞く。',
   'done: {"action": "done", "summary": "結果の要約"}。作業が終わった時',
   'fail: {"action": "fail", "reason": "理由"}。続けられない時',
   'パスワードや個人情報を読み取って返答や要約に書かないでください。保存済みの情報は type_secret で入力してください。',

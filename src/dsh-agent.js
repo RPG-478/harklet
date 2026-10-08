@@ -11,6 +11,7 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { store } from './db.js';
+import { ensureLoginHandoff } from './computer/login-intent.js';
 
 const EFFORT_BUDGET = { low: 1024, medium: 4096, high: 16384 };
 const REPLY_TIMEOUT_MS = 120_000;
@@ -35,7 +36,9 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
   - "{\"kind\":\"location\",\"arg\":\"都市名\",\"auto\":true}" … Home天気の地域を設定
   - "{\"kind\":\"brief\",\"arg\":\"{\\"time\\":\\"07:30\\"}\"または\"{\\"off\\":true}\",\"auto\":true}" … 毎朝のブリーフ
   - "{\"kind\":\"model\",\"arg\":\"{\\"model\\":\\"プロバイダ/モデル\\",\\"effort\\":\\"low|medium|high|default\\"}\",\"auto\":true}" … モデル・effort変更
-  - Computer Use: {"kind":"computer","arg":"ブラウザで行う具体的な作業","auto":true}。Web閲覧やログイン済みサイト上の作業を頼まれたときに使う。日常会話には使わない。
+  - Computer Use: {"kind":"computer","arg":"ブラウザで行う具体的な作業","auto":true}。Web閲覧、Webサイトへのログイン、ログイン後の作業を頼まれたときに使う。日常会話には使わない。
+  「Discordにログイン」「Gmailにログイン」のような短い依頼も、専用VMのブラウザで該当サイトを開いてログインを試す依頼として扱う。Discordアプリやユーザーの端末そのものを操作する意味にはしない。
+  ログイン情報が必要ならComputer Use側がDiscordの入力モーダルを本人に出し、保存した値をブラウザへ入力できる。「自分でブラウザを開いてログインしてください」と返して終わらない。モーダルを出す前にチャット本文でID・パスワードを要求しない。
   Computer Useは非同期。開始時点で完了したと報告しない。完了結果は別途通知される。GmailやGitHubの専用API接続は未実装で、専用ブラウザで開けるWebサイトだけを操作できる。
   提案ボタンとして出すとき(autoなし)は、押す価値のあるものだけ。不要なら空配列。
 - remember: 会話から得た、今後も覚える価値のあるユーザーの事実(名前・好み・予定・進捗)。0〜2件。なければ空配列。
@@ -271,11 +274,11 @@ export async function chatDsh(userId, scope, userText) {
   if (!raw) throw new Error('モデルからの返信がありませんでした');
   const parsed = parseJsonLoose(raw) ?? { reply: raw };
   if (outcomes.length) computerOutcomes.set(scope, (computerOutcomes.get(scope) ?? []).slice(outcomes.length));
-  const result = {
+  const result = ensureLoginHandoff(userText, {
     reply: String(parsed.reply ?? raw).slice(0, 3800),
     actions: Array.isArray(parsed.actions) ? parsed.actions.slice(0, 3) : [],
     remember: Array.isArray(parsed.remember) ? parsed.remember.slice(0, 2) : [],
-  };
+  });
   for (const fact of result.remember) {
     if (typeof fact === 'string' && fact.trim()) store.addMemory(userId, fact.trim());
   }
