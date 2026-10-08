@@ -6,11 +6,11 @@ import {
 } from 'discord.js';
 import { config } from './config.js';
 import { store } from './db.js';
-import { chatDsh, invalidateUserAgents } from './dsh-agent.js';
+import { chatDsh, invalidateUserAgents, recordComputerOutcome } from './dsh-agent.js';
 import { homePayload, geocodeCity } from './home.js';
 import { listModels } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
-import { handleComputerInteraction } from './computer/controller.js';
+import { handleComputerInteraction, startComputerTask } from './computer/controller.js';
 
 function makeClient(withContent) {
   const intents = [
@@ -105,7 +105,7 @@ function actionRows(userId, actions) {
 }
 
 // Agentが実行できる操作。ボタン(act:)と auto 即時実行の両方から呼ぶ。
-async function execAction({ userId, channel, action }) {
+async function execAction({ userId, channel, action, scope, computerChannel, privateComputer = false }) {
   const a = action ?? {};
   const arg = a.arg;
   const norm = (s) => String(s ?? "").toLowerCase().replace(/\s+/g, "");
@@ -118,6 +118,17 @@ async function execAction({ userId, channel, action }) {
       await m.edit(await homePayload(userId, actionRows));
     } catch {}
   };
+
+  if (a.kind === 'computer') {
+    const task = String(arg ?? '').trim();
+    if (privateComputer && !computerChannel) return 'DMを開けなかったため、非公開のブラウザ作業を開始できませんでした';
+    const target = computerChannel ?? channel;
+    if (!target?.send) return 'ブラウザ作業の結果を通知できるチャンネルがありません';
+    return startComputerTask({
+      userId, task, channel: target,
+      onDone: outcome => { if (scope) recordComputerOutcome(userId, scope, task, outcome); },
+    });
+  }
 
   if (a.kind === "remind") {
     const due = Date.parse(arg ?? "");
@@ -199,8 +210,10 @@ async function execAction({ userId, channel, action }) {
 }
 
 async function runAction(interaction, action) {
-  const result = await execAction({ userId: interaction.user.id, channel: interaction.channel, action });
-  return interaction.reply({ content: result ?? "完了", flags: MessageFlags.Ephemeral });
+  if (action?.kind === 'computer') await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const result = await execAction({ userId: interaction.user.id, channel: interaction.channel, action, scope: 'u:' + interaction.user.id });
+  if (interaction.deferred) return interaction.editReply({ content: result ?? '完了' });
+  return interaction.reply({ content: result ?? '完了', flags: MessageFlags.Ephemeral });
 }
 
 async function answer(interaction) {
@@ -211,14 +224,15 @@ async function answer(interaction) {
     const scope = "u:" + interaction.user.id;
     const result = await chatDsh(interaction.user.id, scope, question);
     const all = Array.isArray(result.actions) ? result.actions : [];
-    const autos = all.filter(a => a?.auto === true);
+    const autos = all.filter(a => a?.auto === true || a?.kind === 'computer');
     await interaction.editReply({
       content: result.reply.slice(0, 1900),
-      components: actionRows(interaction.user.id, all.filter(a => a?.auto !== true)),
+      components: actionRows(interaction.user.id, all.filter(a => a?.auto !== true && a?.kind !== 'computer')),
     });
     for (const a of autos) {
-      const r = await execAction({ userId: interaction.user.id, channel: interaction.channel, action: a }).catch(e => "⚠️ " + e.message);
-      if (r) await interaction.followUp(r).catch(() => {});
+      const computerChannel = a.kind === 'computer' && ephemeral ? await interaction.user.createDM().catch(() => null) : null;
+      const r = await execAction({ userId: interaction.user.id, channel: interaction.channel, action: a, scope, computerChannel, privateComputer: a.kind === 'computer' && ephemeral }).catch(e => "⚠️ " + e.message);
+      if (r) await interaction.followUp({ content: r, ...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}) }).catch(() => {});
     }
   } catch (e) {
     await interaction.editReply("⚠️ エラー: " + e.message);
@@ -483,8 +497,8 @@ async function sendAgentReply(message, scope, text = message.content) {
   try {
     const result = await chatDsh(message.author.id, scope, text);
     const all = Array.isArray(result.actions) ? result.actions : [];
-    const autos = all.filter(a => a?.auto === true);
-    const rows = actionRows(message.author.id, all.filter(a => a?.auto !== true));
+    const autos = all.filter(a => a?.auto === true || a?.kind === 'computer');
+    const rows = actionRows(message.author.id, all.filter(a => a?.auto !== true && a?.kind !== 'computer'));
     await message.reply({
       content: result.reply.slice(0, 1900),
       components: result.reply.length <= 1900 ? rows : [],
@@ -494,7 +508,7 @@ async function sendAgentReply(message, scope, text = message.content) {
       await message.reply({ content: result.reply.slice(i, i + 1900), components: last ? rows : [] });
     }
     for (const a of autos) {
-      const r = await execAction({ userId: message.author.id, channel: message.channel, action: a }).catch(e => "⚠️ " + e.message);
+      const r = await execAction({ userId: message.author.id, channel: message.channel, action: a, scope }).catch(e => "⚠️ " + e.message);
       if (r) await message.reply(r).catch(() => {});
     }
   } catch (e) {
@@ -514,6 +528,7 @@ client.on('interactionCreate', async (interaction) => {
     } else if (interaction.isButton() && interaction.customId.startsWith('act:')) {
       const a = store.getAction(Number(interaction.customId.slice(4)));
       if (!a) return interaction.reply({ content: 'このアクションは期限切れです。', flags: MessageFlags.Ephemeral });
+      if (a.userId !== interaction.user.id) return interaction.reply({ content: 'このボタンは依頼した本人だけが使えます。', flags: MessageFlags.Ephemeral });
       await runAction(interaction, a.payload);
       store.delAction(Number(interaction.customId.slice(4)));
     } else if (interaction.isButton() && interaction.customId === 'model_custom') {

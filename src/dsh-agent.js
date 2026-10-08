@@ -24,7 +24,7 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
 - 返答は必ず次のJSONのみ: {"reply": "...", "actions": [...], "remember": [...]}
 - actions: あなたが実行できる操作。最大3件。
   ユーザーが「消して」「設定して」「作って」など実行を求めたら auto: true で即実行される。それ以外は実行ボタンとして表示される。
-  実行依頼を「できません」「手順を説明します」と断るな。操作系の依頼は必ずactionsで実行し、replyは結果の報告にする。
+  利用可能な操作を頼まれたらactionsで実行する。replyには実行前の結果を捏造せず、開始または提案の状態を正確に書く。
   - "{\"label\":\"ボタン名(20字以内)\",\"kind\":\"remind\",\"arg\":\"ISO8601日時\",\"auto\":true}" … リマインダー設定
   - "{\"kind\":\"remind_del\",\"arg\":\"IDまたは本文の一部\",\"auto\":true}" … リマインダー取消
   - "{\"kind\":\"memory\",\"arg\":\"覚える内容\",\"auto\":true}" … 記憶に保存
@@ -35,12 +35,23 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
   - "{\"kind\":\"location\",\"arg\":\"都市名\",\"auto\":true}" … Home天気の地域を設定
   - "{\"kind\":\"brief\",\"arg\":\"{\\"time\\":\\"07:30\\"}\"または\"{\\"off\\":true}\",\"auto\":true}" … 毎朝のブリーフ
   - "{\"kind\":\"model\",\"arg\":\"{\\"model\\":\\"プロバイダ/モデル\\",\\"effort\\":\\"low|medium|high|default\\"}\",\"auto\":true}" … モデル・effort変更
+  - Computer Use: {"kind":"computer","arg":"ブラウザで行う具体的な作業","auto":true}。Web閲覧やログイン済みサイト上の作業を頼まれたときに使う。日常会話には使わない。
+  Computer Useは非同期。開始時点で完了したと報告しない。完了結果は別途通知される。GmailやGitHubの専用API接続は未実装で、専用ブラウザで開けるWebサイトだけを操作できる。
   提案ボタンとして出すとき(autoなし)は、押す価値のあるものだけ。不要なら空配列。
 - remember: 会話から得た、今後も覚える価値のあるユーザーの事実(名前・好み・予定・進捗)。0〜2件。なければ空配列。
 - reply の中では上記のDiscord記法だけを使い、JSON構造は壊すな。`;
 
 // sessionId -> effort ("low"|"medium"|"high")
 const effortBySession = new Map();
+const computerOutcomes = new Map();
+
+export function recordComputerOutcome(userId, scope, task, outcome) {
+  const note = `ブラウザ作業「${String(task).slice(0, 200)}」の結果: ${String(outcome).slice(0, 1000)}`;
+  const pending = computerOutcomes.get(scope) ?? [];
+  pending.push(note);
+  computerOutcomes.set(scope, pending.slice(-3));
+  store.addHistory(scope, userId, 'assistant', note);
+}
 
 function parseJsonLoose(text) {
   const m = String(text).match(/\{[\s\S]*\}/);
@@ -238,7 +249,9 @@ export async function chatDsh(userId, scope, userText) {
   const memories = store.listMemories(userId);
   const cards = store.listHomeCards(userId);
   const city = (store.getSettings(userId) ?? {}).home_city;
+  const outcomes = computerOutcomes.get(scope) ?? [];
   const ctxBlock = [
+    outcomes.length ? '【前回以降のブラウザ作業結果】\n' + outcomes.join('\n') : '',
     memories.length ? '【このユーザーについて覚えていること】\n' + memories.map(m => '- ' + m.content).join('\n') : '',
     cards.length ? '【ユーザーのHomeに出ているカード】\n' + cards.map(c => '- ' + (c.emoji ? c.emoji + ' ' : '') + c.title + '（内容指示: ' + String(c.prompt).slice(0, 80) + '）').join('\n') : '',
     city ? '【ユーザーの地域】' + city + '（Homeの天気カードはこの地域）' : '',
@@ -257,6 +270,7 @@ export async function chatDsh(userId, scope, userText) {
   const raw = lastAssistantText(agent);
   if (!raw) throw new Error('モデルからの返信がありませんでした');
   const parsed = parseJsonLoose(raw) ?? { reply: raw };
+  if (outcomes.length) computerOutcomes.set(scope, (computerOutcomes.get(scope) ?? []).slice(outcomes.length));
   const result = {
     reply: String(parsed.reply ?? raw).slice(0, 3800),
     actions: Array.isArray(parsed.actions) ? parsed.actions.slice(0, 3) : [],

@@ -1,6 +1,6 @@
 # Agent browser / Agent専用ブラウザ
 
-`/computer` runs a separate Quicksand Linux VM for each Discord user. The VM contains Chromium and Playwright. Harklet controls that browser over a loopback-only CDP port. Quicksand uses QEMU and does not require Docker Desktop. Site login state is saved with each user's VM disk when the session stops.
+The chat agent can start browser work when a user asks it to use a website. `/computer` also runs a separate Quicksand Linux VM for each Discord user. The VM contains Chromium and Playwright. Harklet controls that browser over a loopback-only CDP port. Quicksand uses QEMU and does not require Docker Desktop. Site login state is saved with each user's VM disk when the session stops.
 
 ## Setup
 
@@ -13,7 +13,9 @@ npm start
 
 Install Node.js 22.5+ and Python 3.11+. On Windows, hardware acceleration uses Windows Hypervisor Platform (WHPX); software emulation is slower. The first install downloads QEMU and multiple VM image layers, so allow disk space and download time. `npm run browser:install` creates `sidecar/.venv` and installs Quicksand plus its QEMU and CUA images.
 
-Set `HARKLET_SECRET_KEY` in `.env` to a private random string of at least 16 characters. `HARKLET_CU_MODEL` can select a vision-capable model; otherwise `/computer` uses `LLM_MODEL`. Use `/computer run task:<request>` to start, `/computer view` to get a private screenshot in Discord, and `/computer stop` to save and close the VM. Idle VMs are saved and stopped after 30 minutes.
+Set `HARKLET_SECRET_KEY` in `.env` to a private random string of at least 16 characters. `HARKLET_CU_MODEL` can select a vision-capable model; otherwise browser work uses `LLM_MODEL`. Ask Harklet in ordinary chat to research or work on a website; it chooses whether to start the browser, posts progress and the final result, and includes that result in the next chat turn. `/ask private:true` routes browser progress and credential prompts to your DM. Use `/computer run task:<request>` for direct control, `/computer view` for a private screenshot, and `/computer stop` to save and close the VM. Idle VMs are saved and stopped after 30 minutes.
+
+Websites such as Gmail and GitHub require sign-in inside the VM. There are no native Gmail or GitHub account connectors yet. The chat agent delegates browser tasks to a separate vision loop; it cannot switch among native service tools during a single run.
 
 VM saves live in `./browser-data/quicksand/sandboxes/`, with names derived from a hash of the Discord user ID. Set `HARKLET_BROWSER_DATA_DIR` to move them. Protect this directory: the saved guest browser contains website cookies and downloaded files. Earlier local Playwright profiles are not migrated into the VM, so users must sign in again once. Login values in Harklet's database remain encrypted and bound to the HTTPS origin where they were entered.
 

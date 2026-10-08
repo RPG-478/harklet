@@ -2,13 +2,13 @@
 
 # harklet
 
-`/computer` はユーザー専用のQuicksand Linux VM内でWeb操作を行います。Dockerは不要です。導入方法と権限の範囲は[専用ブラウザの説明](docs/browser-agent.md)を参照してください。
+普段のチャットでWeb作業を頼むと、Agentが必要に応じてユーザー専用のQuicksand Linux VM内でブラウザを操作します。Dockerは不要です。`/computer` は直接操作用の補助コマンドです。導入方法と権限の範囲は[専用ブラウザの説明](docs/browser-agent.md)を参照してください。
 
 **Languages:** [English](./README.md) | 日本語 | [中文](./README.zh.md)
 
 Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。
 
-Hark Pro(hark.com)の中核体験 — **記憶を持つアシスタント、会話からの次の一手の提案、ワンタップ実行、プロアクティブな支援** — を Discord のコマンド・ボタン・スレッドに落とし込んでいます。
+**チャットからAgentに仕事を任せる体験**を中心に、記憶、Web操作、提案、プロアクティブな支援をDiscordに提供します。
 
 ## 機能
 
@@ -19,6 +19,9 @@ Hark Pro(hark.com)の中核体験 — **記憶を持つアシスタント、会�
 | プロアクティブ支援 | リマインダー配信 + 毎朝のモーニングブリーフ(`/brief`) |
 | Home | `/home` — 常駐ダッシュボード。今日の一手・天気・GitHub概要・予定・記憶をカード表示。30分ごと自動更新 |
 | Projects | `/project` — チャットを話題で分割するスレッド(互換: `/panel`) |
+| Agentブラウザ | チャットでWeb作業を依頼すると、必要に応じて専用VMのブラウザを使い、進捗と結果を通知 |
+
+GmailやGitHubは、VM内でログインしたWebサイトとして操作できます。専用のアカウント接続やOAuth連携はまだありません。
 
 ## セットアップ
 

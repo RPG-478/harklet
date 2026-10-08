@@ -60,6 +60,15 @@ async function handleCommand(interaction) {
 
 async function startRun(interaction, task) {
   const userId = interaction.user.id;
+  await interaction.deferReply({ flags: EPHEMERAL });
+  await startComputerTask({ userId, task, channel: interaction.channel });
+  await interaction.editReply('作業を開始しました。進み具合はこのチャンネルに出します。');
+}
+
+// The chat agent and /computer share one user slot, session and credential flow.
+export async function startComputerTask({ userId, task, channel, post: customPost, onDone }) {
+  task = String(task ?? '').trim();
+  if (!task || task.length > 2000) throw new Error('作業内容を1〜2000文字で指定してください');
   if (!vaultReady()) throw new Error('HARKLET_SECRET_KEY を .env に設定してから再起動してください（16文字以上）');
   if (!config.llm.apiKey) throw new Error('LLMのAPIキーが未設定です');
   if (running.has(userId)) throw new Error('すでに作業中です。/computer stop で止められます');
@@ -68,20 +77,19 @@ async function startRun(interaction, task) {
   running.set(userId, abort);
   let s;
   try {
-    await interaction.deferReply({ flags: EPHEMERAL });
     s = await ensureSession(userId);
   } catch (err) {
     running.delete(userId);
     throw err;
   }
-  const channel = interaction.channel;
-  const post = text => channel?.send(text).catch(() => {});
+  const post = customPost ?? (text => channel?.send(text).catch(() => {}));
   await post('🖥️ <@' + userId + '> の作業を開始します: ' + task.slice(0, 200));
-  await interaction.editReply('作業を開始しました。進み具合はこのチャンネルに出します。');
-  runTask(userId, s, task, abort, channel, post);
+  void runTask(userId, s, task, abort, channel, post, onDone);
+  return '🖥️ ブラウザ作業を開始しました。完了したら結果をお知らせします。';
 }
 
-async function runTask(userId, s, task, abort, channel, post) {
+async function runTask(userId, s, task, abort, channel, post, onDone) {
+  let outcome;
   try {
     const result = await runComputerTask({
       userId,
@@ -102,13 +110,15 @@ async function runTask(userId, s, task, abort, channel, post) {
       progress: post,
       signal: abort.signal,
     });
-    await post(outcomeText(result));
+    outcome = outcomeText(result);
   } catch (err) {
-    await post('⚠️ 作業が止まりました: ' + err.message);
+    outcome = '⚠️ 作業が止まりました: ' + err.message;
   } finally {
     running.delete(userId);
     bumpIdle(userId);
   }
+  try { await onDone?.(outcome); } catch (err) { console.error('computer outcome callback failed:', err); }
+  await post(outcome);
 }
 
 function outcomeText(r) {
