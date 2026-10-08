@@ -5,6 +5,7 @@ import { sidecar } from './sidecar.js';
 import { makeDecider } from './vision.js';
 import { runComputerTask } from './loop.js';
 import { secretRequestPayload, secretModal, viewerPayload } from './ui.js';
+import { retrying, retryingSidecar } from './retry.js';
 
 const IDLE_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
@@ -86,14 +87,14 @@ async function runTask(userId, s, task, abort, channel, post) {
       userId,
       task,
       sessionId: s.id,
-      sidecar,
+      sidecar: retryingSidecar(sidecar),
       vault,
-      decide: makeDecider({
+      decide: retrying(makeDecider({
         provider: config.llm.provider,
         baseUrl: config.llm.baseUrl,
         apiKey: config.llm.apiKey,
         model: visionModel(),
-      }),
+      })),
       requestSecrets: ({ message, fields }) => requestSecrets(userId, channel, message, fields),
       progress: post,
       signal: abort.signal,

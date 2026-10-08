@@ -121,7 +121,9 @@ export function makeDecider({ provider, baseUrl, apiKey, model, fetchImpl = fetc
       const body = await res.json().catch(() => null);
       const msg = body?.error?.message ?? body?.error ?? '';
       const detail = typeof msg === 'string' && msg ? ': ' + msg.slice(0, 200) : '';
-      throw new Error('LLM ' + res.status + detail);
+      const err = new Error('LLM ' + res.status + detail);
+      err.status = res.status;
+      throw err;
     }
     const data = await res.json();
     return parseJsonObject(extractText(provider, data));
