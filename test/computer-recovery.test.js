@@ -1,20 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isTransient, withRetry, retrying, retryingSidecar } from '../src/computer/retry.js';
+import { isTransient, withRetry, retrying, retryingBrowser } from '../src/computer/retry.js';
 import { runComputerTask } from '../src/computer/loop.js';
 import { buildVisionRequest } from '../src/computer/vision.js';
 
 const noSleep = async () => {};
 const withStatus = (status, msg) => Object.assign(new Error(msg), { status });
 const NO_VAULT = { listSecretNames: () => [], getSecret: () => null };
-const okSidecar = (extra = {}) => ({
+const okBrowser = (extra = {}) => ({
   screenshot: async () => ({ png_base64: "AAAA", width: 800, height: 600 }),
   act: async () => {},
   elements: async () => ({ elements: [] }),
   ...extra,
 });
 const runOpts = (overrides) => ({
-  userId: "u", task: "t", sessionId: "s", sidecar: okSidecar(), vault: NO_VAULT,
+  userId: "u", task: "t", sessionId: "s", browser: okBrowser(), vault: NO_VAULT,
   requestSecrets: async () => null, settleMs: 0, sleep: noSleep, ...overrides,
 });
 
@@ -36,14 +36,14 @@ test('withRetry retries transient failures and gives up after the last attempt',
   assert.equal(calls, 3);
 });
 
-test('the sidecar wrapper retries screenshots but never repeats actions', async () => {
+test('the browser wrapper retries screenshots but never repeats actions', async () => {
   let shots = 0;
   let acts = 0;
-  const sidecar = {
-    screenshot: async () => { shots++; if (shots === 1) throw new Error("sidecar busy"); return { png_base64: "AAAA", width: 1, height: 1 }; },
+  const browser = {
+    screenshot: async () => { shots++; if (shots === 1) throw new Error("browser busy"); return { png_base64: "AAAA", width: 1, height: 1 }; },
     act: async () => { acts++; throw new Error("action failed"); },
   };
-  const wrapped = retryingSidecar(sidecar, { sleep: noSleep });
+  const wrapped = retryingBrowser(browser, { sleep: noSleep });
   assert.equal((await wrapped.screenshot("s")).width, 1);
   assert.equal(shots, 2);
   await assert.rejects(wrapped.act("s", { type: "click", x: 0, y: 0 }), /action failed/);
@@ -53,9 +53,9 @@ test('the sidecar wrapper retries screenshots but never repeats actions', async 
 test('a failed action is reported to the model in its next turn', async () => {
   const replies = [{ action: "click", x: 1, y: 1 }, { action: "done", summary: "ok" }];
   const seen = [];
-  const sidecar = okSidecar({ act: async () => { throw new Error("action failed (RuntimeError)"); } });
+  const browser = okBrowser({ act: async () => { throw new Error("action failed (RuntimeError)"); } });
   const result = await runComputerTask(runOpts({
-    sidecar, decide: async args => { seen.push(args); return replies.shift(); },
+    browser, decide: async args => { seen.push(args); return replies.shift(); },
   }));
   assert.equal(result.status, "done");
   assert.ok(seen[1].history.some(h => h.includes("失敗")));
@@ -90,12 +90,12 @@ test('repeated model failures inject notes and stop after three turns in a row',
 test('a failed screenshot is noted and the turn goes on without an image', async () => {
   let shots = 0;
   const seen = [];
-  const sidecar = okSidecar({
-    screenshot: async () => { shots++; if (shots === 1) throw new Error("sidecar busy"); return { png_base64: "AAAA", width: 800, height: 600 }; },
+  const browser = okBrowser({
+    screenshot: async () => { shots++; if (shots === 1) throw new Error("browser busy"); return { png_base64: "AAAA", width: 800, height: 600 }; },
   });
   const replies = [{ action: "wait", seconds: 1 }, { action: "done", summary: "ok" }];
   const result = await runComputerTask(runOpts({
-    sidecar, decide: async args => { seen.push(args); return replies.shift(); },
+    browser, decide: async args => { seen.push(args); return replies.shift(); },
   }));
   assert.equal(result.status, 'done');
   assert.equal(seen[0].pngBase64, null);

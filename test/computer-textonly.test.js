@@ -12,13 +12,13 @@ test('after an image is rejected, coordinate clicks are refused and element clic
   const seen = [];
   const replies = [{ action: "click", x: 5, y: 5 }, { action: "click_element", index: 0 }, { action: "done", summary: "ok" }];
   let first = true;
-  const sidecar = {
+  const browser = {
     screenshot: async () => ({ png_base64: "AAAA", width: 800, height: 600 }),
     elements: async () => ({ elements: [{ index: 0, role: "AXButton", label: "Sign in" }] }),
     act: async (id, a) => { acts.push(a); },
   };
   const result = await runComputerTask({
-    userId: "u", task: "t", sessionId: "s", sidecar, vault: NO_VAULT,
+    userId: "u", task: "t", sessionId: "s", browser, vault: NO_VAULT,
     decide: async args => {
       seen.push(args);
       if (first) { first = false; throw badRequest(); }
@@ -33,13 +33,13 @@ test('after an image is rejected, coordinate clicks are refused and element clic
 });
 
 test('with no image and no element list the run stops with a reason', async () => {
-  const sidecar = {
+  const browser = {
     screenshot: async () => ({ png_base64: "AAAA", width: 800, height: 600 }),
     act: async () => {},
     elements: async () => { throw new Error("no driver"); },
   };
   const result = await runComputerTask({
-    userId: "u", task: "t", sessionId: "s", sidecar, vault: NO_VAULT,
+    userId: "u", task: "t", sessionId: "s", browser, vault: NO_VAULT,
     decide: async () => { throw badRequest(); },
     requestSecrets: async () => null, settleMs: 0, sleep: noSleep,
   });

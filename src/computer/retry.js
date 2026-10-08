@@ -26,6 +26,6 @@ export function retrying(fn, options) {
 
 // Only the screenshot is retried. Actions are not, because repeating a click or a
 // typed value could do it twice.
-export function retryingSidecar(browser, options) {
+export function retryingBrowser(browser, options) {
   return { ...browser, screenshot: id => withRetry(() => browser.screenshot(id), options) };
 }

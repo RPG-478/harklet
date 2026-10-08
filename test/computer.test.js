@@ -67,12 +67,12 @@ test('loop keeps secret values away from the model and the progress log', async 
   const seenArgs = [];
   const acts = [];
   const progress = [];
-  const sidecar = {
+  const browser = {
     screenshot: async () => ({ png_base64: 'AAAA', width: 800, height: 600 }),
     act: async (id, a) => { acts.push(a); },
   };
   const result = await runComputerTask({
-    userId, task: 'ログインして', sessionId: 's1', sidecar, vault,
+    userId, task: 'ログインして', sessionId: 's1', browser, vault,
     decide: async args => { seenArgs.push(args); return script.shift(); },
     requestSecrets: async ({ fields }) => {
       vault.setSecret(userId, 'site_password', 'hunter2-SECRET');
@@ -92,13 +92,13 @@ test('loop keeps secret values away from the model and the progress log', async 
 
 test('loop stops on limits and cancellation', async () => {
   const vault = { listSecretNames: () => [], getSecret: () => null };
-  const sidecar = { screenshot: async () => ({ png_base64: 'AAAA', width: 800, height: 600 }), act: async () => {} };
-  const bogus = await runComputerTask({ userId: 'x', task: 't', sessionId: 's', sidecar, vault,
+  const browser = { screenshot: async () => ({ png_base64: 'AAAA', width: 800, height: 600 }), act: async () => {} };
+  const bogus = await runComputerTask({ userId: 'x', task: 't', sessionId: 's', browser, vault,
     decide: async () => ({ action: 'nope' }), requestSecrets: async () => null, settleMs: 0, sleep: async () => {}, maxSteps: 3 });
   assert.equal(bogus.status, 'max_steps');
   const ac = new AbortController();
   ac.abort();
-  const stopped = await runComputerTask({ userId: 'x', task: 't', sessionId: 's', sidecar, vault,
+  const stopped = await runComputerTask({ userId: 'x', task: 't', sessionId: 's', browser, vault,
     decide: async () => ({ action: 'click', x: 1, y: 1 }), requestSecrets: async () => null, signal: ac.signal, settleMs: 0, sleep: async () => {} });
   assert.equal(stopped.status, 'stopped');
 });

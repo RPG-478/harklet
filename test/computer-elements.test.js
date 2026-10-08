@@ -15,7 +15,7 @@ test('click_element needs an index that is in the current list', () => {
 
 test('loop clicks by element when the list is available', async () => {
   const sent = [];
-  const sidecar = {
+  const browser = {
     screenshot: async () => ({ png_base64: 'AAAA', width: 800, height: 600 }),
     elements: async () => ({ window: { app: 'Editor', title: 'Login' }, elements: [{ index: 0, role: 'AXButton', label: 'Sign in', x: 1, y: 2 }] }),
     act: async (id, a) => { sent.push(a); },
@@ -23,7 +23,7 @@ test('loop clicks by element when the list is available', async () => {
   const replies = [{ action: 'click_element', index: 0 }, { action: 'done', summary: 'ok' }];
   const seen = [];
   const result = await runComputerTask({
-    userId: 'u', task: 't', sessionId: 's', sidecar, vault: NO_VAULT,
+    userId: 'u', task: 't', sessionId: 's', browser, vault: NO_VAULT,
     decide: async args => { seen.push(args); return replies.shift(); },
     requestSecrets: async () => null, settleMs: 0, sleep: async () => {},
   });
@@ -34,7 +34,7 @@ test('loop clicks by element when the list is available', async () => {
 
 test('loop falls back to coordinates when elements cannot be read', async () => {
   const sent = [];
-  const sidecar = {
+  const browser = {
     screenshot: async () => ({ png_base64: 'AAAA', width: 800, height: 600 }),
     elements: async () => { throw new Error('element access unavailable'); },
     act: async (id, a) => { sent.push(a); },
@@ -42,7 +42,7 @@ test('loop falls back to coordinates when elements cannot be read', async () => 
   const replies = [{ action: 'click_element', index: 0 }, { action: 'click', x: 5, y: 6 }, { action: 'done', summary: 'ok' }];
   const seen = [];
   const result = await runComputerTask({
-    userId: 'u', task: 't', sessionId: 's', sidecar, vault: NO_VAULT,
+    userId: 'u', task: 't', sessionId: 's', browser, vault: NO_VAULT,
     decide: async args => { seen.push(args); return replies.shift(); },
     requestSecrets: async () => null, settleMs: 0, sleep: async () => {},
   });

@@ -5,7 +5,7 @@ import { browser } from './browser.js';
 import { makeDecider } from './vision.js';
 import { runComputerTask } from './loop.js';
 import { secretRequestPayload, secretModal, viewerPayload } from './ui.js';
-import { retrying, retryingSidecar } from './retry.js';
+import { retrying, retryingBrowser } from './retry.js';
 
 const IDLE_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
@@ -87,7 +87,7 @@ async function runTask(userId, s, task, abort, channel, post) {
       userId,
       task,
       sessionId: s.id,
-      sidecar: retryingSidecar(browser),
+      browser: retryingBrowser(browser),
       vault: {
         listSecretNames: id => vault.listSecretNames(id, browser.origin(s.id)),
         getSecret: (id, name) => vault.getSecret(id, name, browser.origin(s.id)),

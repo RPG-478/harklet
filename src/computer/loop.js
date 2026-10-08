@@ -27,9 +27,9 @@ function toBridge(a) {
   }
 }
 
-async function readElements(sidecar, sessionId) {
+async function readElements(browser, sessionId) {
   try {
-    return await sidecar.elements(sessionId);
+    return await browser.elements(sessionId);
   } catch {
     return null;
   }
@@ -64,7 +64,7 @@ function describe(a) {
 // never passed to decide(), never put in history and never returned in the result.
 export async function runComputerTask(opts) {
   const {
-    userId, task, sessionId, sidecar, vault, decide, requestSecrets, progress,
+    userId, task, sessionId, browser, vault, decide, requestSecrets, progress,
     signal, maxSteps = 25, deadlineMs = 15 * 60 * 1000, settleMs = 700,
     sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   } = opts;
@@ -84,13 +84,13 @@ export async function runComputerTask(opts) {
 
     let shot = null;
     try {
-      shot = await sidecar.screenshot(sessionId);
+      shot = await browser.screenshot(sessionId);
       size = { width: shot.width, height: shot.height };
     } catch (err) {
       note(step + '. 画面を取得できませんでした（' + err.message + '）。今回は要素一覧で操作します');
     }
 
-    const elementList = await readElements(sidecar, sessionId);
+    const elementList = await readElements(browser, sessionId);
     const imageSent = useImage && shot !== null;
     if (!imageSent && !elementList) {
       return { status: 'failed', reason: '画像も要素一覧もないので操作できませんでした', steps: step };
@@ -162,7 +162,7 @@ export async function runComputerTask(opts) {
         if (value === null) {
           note(step + '. type_secret ' + a.name + ' は未保存のため失敗');
         } else {
-          await sidecar.act(sessionId, { type: 'type', text: value });
+          await browser.act(sessionId, { type: 'type', text: value });
           note(step + '. type_secret ' + a.name + ' を入力');
         }
       } catch {
@@ -173,7 +173,7 @@ export async function runComputerTask(opts) {
       note(step + '. wait ' + a.seconds + '秒');
     } else {
       try {
-        await sidecar.act(sessionId, toBridge(a));
+        await browser.act(sessionId, toBridge(a));
         note(step + '. ' + describe(a));
       } catch (err) {
         note(step + '. ' + describe(a) + ' は失敗: ' + err.message);
