@@ -21,6 +21,8 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 
 Gmail and GitHub are currently reachable only as websites in the agent browser after sign-in. Native account connectors and OAuth are not implemented. The GitHub Home card uses a separate token setting for a summary and does not give the chat agent GitHub API access.
 
+For testing, set `DISCORD_GUILD_ID` and `HARKLET_ENABLE_RESET=1` when registering commands and starting the bot. `/reset` is limited to server administrators. It shows a confirmation button before deleting Harklet's managed category, its child channels, tracked project threads, and all data in Harklet's database, including saved login values. Saved browser VM cookies remain.
+
 ## Setup
 
 1. Create an application at the [Discord Developer Portal](https://discord.com/developers/applications) and get a bot token.

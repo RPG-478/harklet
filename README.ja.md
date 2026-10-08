@@ -23,6 +23,8 @@ Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。
 
 GmailやGitHubは、VM内でログインしたWebサイトとして操作できます。専用のアカウント接続やOAuth連携はまだありません。
 
+テスト用の`/reset`は、`DISCORD_GUILD_ID`と`HARKLET_ENABLE_RESET=1`を設定して`npm run register`し、同じ設定でBotを起動したときだけ使えます。対象サーバーの管理者が実行すると、Harkletのカテゴリ・配下チャンネル・プロジェクトスレッドと、Harklet DB内の全ユーザーデータ（保存済みログイン情報を含む）を削除します。実行前に削除対象を表示し、確認ボタンを押す必要があります。ブラウザVMの保存済みCookieは削除しません。
+
 ## セットアップ
 
 1. [Discord Developer Portal](https://discord.com/developers/applications) で Application を作成し、Bot トークンを取得。

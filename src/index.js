@@ -5,12 +5,12 @@ import {
   TextInputStyle, PermissionFlagsBits, MessageFlags,
 } from 'discord.js';
 import { config } from './config.js';
-import { store } from './db.js';
-import { chatDsh, invalidateUserAgents, recordComputerOutcome } from './dsh-agent.js';
+import { store, clearHarkletDatabase } from './db.js';
+import { chatDsh, invalidateUserAgents, recordComputerOutcome, shutdownDsh } from './dsh-agent.js';
 import { homePayload, geocodeCity } from './home.js';
 import { listModels } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
-import { handleComputerInteraction, startComputerTask } from './computer/controller.js';
+import { handleComputerInteraction, startComputerTask, computerIsBusy } from './computer/controller.js';
 
 function makeClient(withContent) {
   const intents = [
@@ -36,6 +36,43 @@ const MODEL_RANK = /gpt|claude|gemini|grok|o4|deepseek|qwen|llama|mistral/i;
 // /model パネルで選択中(未適用)の値。決定ボタンで確定する。
 const pendingModelSel = new Map(); // userId -> model
 const pendingEffortSel = new Map(); // userId -> effort|'default'
+const pendingResets = new Map(); // guildId -> { userId, expires }
+const resettingGuilds = new Set();
+
+function resetAllowed(i) {
+  return process.env.HARKLET_ENABLE_RESET === '1' && config.guildId && i.guildId === config.guildId &&
+    i.memberPermissions?.has(PermissionFlagsBits.Administrator);
+}
+
+async function resetTargets(guild) {
+  const all = await guild.channels.fetch();
+  const tracked = store.getManagedCategory(guild.id);
+  const project = all.get(store.getProjectChannel(guild.id));
+  const fallback = project?.parent?.name === 'Harklet' ? project.parentId : null;
+  const category = all.get(tracked) || all.get(fallback);
+  const channels = category?.type === ChannelType.GuildCategory
+    ? [...all.values()].filter(ch => ch && ch.parentId === category.id)
+    : [];
+  const threads = [];
+  for (const id of store.allPanels()) {
+    const thread = await guild.channels.fetch(id).catch(() => null);
+    if (thread?.guildId === guild.id && thread.isThread()) threads.push(thread);
+  }
+  return { category, channels, threads };
+}
+
+async function performReset(i) {
+  if (computerIsBusy()) throw new Error('Computer Useの作業中です。/computer stop で停止してから再実行してください');
+  const { category, channels, threads } = await resetTargets(i.guild);
+  for (const thread of threads) await thread.delete('Harklet test reset');
+  for (const channel of channels) await channel.delete('Harklet test reset');
+  if (category) await category.delete('Harklet test reset');
+  await shutdownDsh();
+  const tables = clearHarkletDatabase();
+  pendingModelSel.clear();
+  pendingEffortSel.clear();
+  return `リセット完了: スレッド${threads.length}件、チャンネル${channels.length + (category ? 1 : 0)}件、DB ${tables.length}テーブルのデータを消去しました。保存済みブラウザVMのCookieは残ります。`;
+}
 
 async function modelPanel(userId) {
   const s = store.getSettings(userId) ?? {};
@@ -252,6 +289,22 @@ const handlers = {
     await i.reply({ ...(await modelPanel(i.user.id)), flags: MessageFlags.Ephemeral });
   },
 
+  async reset(i) {
+    if (!resetAllowed(i)) return i.reply({ content: 'このテスト用コマンドは対象サーバーの管理者だけが使えます。', flags: MessageFlags.Ephemeral });
+    if (computerIsBusy()) return i.reply({ content: 'Computer Useの作業を止めてから実行してください。', flags: MessageFlags.Ephemeral });
+    const { category, channels, threads } = await resetTargets(i.guild);
+    pendingResets.set(i.guildId, { userId: i.user.id, expires: Date.now() + 2 * 60_000 });
+    const targets = category ? `カテゴリ「${category.name}」と配下${channels.length}チャンネル` : 'Harklet管理カテゴリは見つかりません';
+    return i.reply({
+      content: `⚠️ **テスト用リセット**\n削除対象: ${targets}、Harkletのプロジェクトスレッド${threads.length}件、**Harklet DBの全データ（全ユーザーの記憶・設定・ログイン情報を含む）**。ブラウザVMのCookieは残ります。\n2分以内に実行ボタンを押すと削除します。`,
+      components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('reset_confirm:' + i.guildId).setLabel('リセットを実行').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('reset_cancel:' + i.guildId).setLabel('中止').setStyle(ButtonStyle.Secondary),
+      )],
+      flags: MessageFlags.Ephemeral,
+    });
+  },
+
   async main(i) {
     const sub = i.options.getSubcommand();
     if (!i.guildId) return i.reply({ content: 'サーバー内で実行してください。', flags: MessageFlags.Ephemeral });
@@ -266,6 +319,7 @@ const handlers = {
       }
       try {
         const cat = await i.guild.channels.create({ name: 'Harklet', type: ChannelType.GuildCategory });
+        store.setManagedCategory(i.guildId, cat.id);
         let main = i.options.getChannel('channel');
         if (!main) main = await i.guild.channels.create({ name: 'chat', type: ChannelType.GuildText, parent: cat.id });
         const homeCh = await i.guild.channels.create({ name: 'home', type: ChannelType.GuildText, parent: cat.id });
@@ -525,6 +579,22 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
       const h = handlers[interaction.commandName];
       if (h) await h(interaction);
+    } else if (interaction.isButton() && /^reset_(confirm|cancel):/.test(interaction.customId)) {
+      if (!resetAllowed(interaction)) return interaction.reply({ content: '管理者のみ実行できます。', flags: MessageFlags.Ephemeral });
+      const [kind, guildId] = interaction.customId.split(':');
+      const pending = pendingResets.get(guildId);
+      if (!pending || pending.userId !== interaction.user.id || pending.expires < Date.now()) {
+        return interaction.reply({ content: '確認の有効期限が切れました。/reset からやり直してください。', flags: MessageFlags.Ephemeral });
+      }
+      pendingResets.delete(guildId);
+      if (kind === 'reset_cancel') return interaction.update({ content: 'リセットを中止しました。', components: [] });
+      if (resettingGuilds.has(guildId)) return interaction.reply({ content: 'リセットはすでに実行中です。', flags: MessageFlags.Ephemeral });
+      resettingGuilds.add(guildId);
+      await interaction.update({ content: 'HarkletのチャンネルとDBを削除しています…', components: [] });
+      try {
+        const result = await performReset(interaction);
+        await interaction.editReply({ content: result }).catch(() => interaction.user.send(result).catch(() => {}));
+      } finally { resettingGuilds.delete(guildId); }
     } else if (interaction.isButton() && interaction.customId.startsWith('act:')) {
       const a = store.getAction(Number(interaction.customId.slice(4)));
       if (!a) return interaction.reply({ content: 'このアクションは期限切れです。', flags: MessageFlags.Ephemeral });
@@ -649,6 +719,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.on('messageCreate', async (message) => {
+  if (message.guildId && resettingGuilds.has(message.guildId)) return;
   if (!message.content.trim()) return;
   if (message.author.bot) return;
 

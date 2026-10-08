@@ -57,12 +57,20 @@ const commands = [
       .addStringOption(o => o.setName('task').setDescription('やってほしいこと').setRequired(true)))
     .addSubcommand(s => s.setName('view').setDescription('作業中の画面を見る（本人だけに表示）'))
     .addSubcommand(s => s.setName('stop').setDescription('作業を止めて画面を破棄')),
-].map(c => c.toJSON());
+];
+
+// This command clears the entire Harklet database, so expose it only in an opted-in test guild.
+if (process.env.HARKLET_ENABLE_RESET === '1' && config.guildId) {
+  commands.push(new SlashCommandBuilder().setName('reset')
+    .setDescription('テスト用: Harkletのチャンネルと全DBデータを消去')
+    .setDefaultMemberPermissions('8'));
+}
+const payload = commands.map(c => c.toJSON());
 
 const rest = new REST().setToken(config.discordToken);
 const route = config.guildId
   ? Routes.applicationGuildCommands(config.clientId, config.guildId)
   : Routes.applicationCommands(config.clientId);
 
-await rest.put(route, { body: commands });
+await rest.put(route, { body: payload });
 console.log(`Registered ${commands.length} commands ${config.guildId ? `to guild ${config.guildId}` : 'globally'}`);

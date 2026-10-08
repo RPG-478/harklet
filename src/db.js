@@ -65,6 +65,10 @@ CREATE TABLE IF NOT EXISTS project_channels (
   guild_id TEXT PRIMARY KEY,
   channel_id TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS managed_categories (
+  guild_id TEXT PRIMARY KEY,
+  category_id TEXT NOT NULL
+);
 `);
 
 // v2: per-user LLM prefs / v3: home message anchor
@@ -119,6 +123,9 @@ const q = {
   setMain: db.prepare('INSERT OR REPLACE INTO main_channels (guild_id, channel_id, set_by) VALUES (?, ?, ?)'),
   getMain: db.prepare('SELECT channel_id FROM main_channels WHERE guild_id = ?'),
   clearMain: db.prepare('DELETE FROM main_channels WHERE guild_id = ?'),
+  setManagedCategory: db.prepare('INSERT OR REPLACE INTO managed_categories (guild_id, category_id) VALUES (?, ?)'),
+  getManagedCategory: db.prepare('SELECT category_id FROM managed_categories WHERE guild_id = ?'),
+  allPanels: db.prepare('SELECT thread_id FROM panels'),
 };
 
 export const store = {
@@ -164,4 +171,22 @@ export const store = {
   setMain: (guildId, channelId, setBy) => q.setMain.run(guildId, channelId, setBy),
   getMain: (guildId) => q.getMain.get(guildId)?.channel_id ?? null,
   clearMain: (guildId) => q.clearMain.run(guildId),
+  setManagedCategory: (guildId, categoryId) => q.setManagedCategory.run(guildId, categoryId),
+  getManagedCategory: (guildId) => q.getManagedCategory.get(guildId)?.category_id ?? null,
+  allPanels: () => q.allPanels.all().map(r => r.thread_id),
 };
+
+// Keep the schema so the running bot can restart after a test reset.
+export function clearHarkletDatabase() {
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(row => row.name);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const name of tables) db.prepare('DELETE FROM "' + name.replaceAll('"', '""') + '"').run();
+    db.exec('DELETE FROM sqlite_sequence');
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  return tables;
+}
