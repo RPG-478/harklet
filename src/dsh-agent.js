@@ -227,8 +227,12 @@ export async function chatDsh(userId, scope, userText) {
   }
   const agent = await agentFor(userId, scope);
   const memories = store.listMemories(userId);
+  const cards = store.listHomeCards(userId);
+  const city = (store.getSettings(userId) ?? {}).home_city;
   const ctxBlock = [
     memories.length ? '【このユーザーについて覚えていること】\n' + memories.map(m => '- ' + m.content).join('\n') : '',
+    cards.length ? '【ユーザーのHomeに出ているカード】\n' + cards.map(c => '- ' + (c.emoji ? c.emoji + ' ' : '') + c.title + '（内容指示: ' + String(c.prompt).slice(0, 80) + '）').join('\n') : '',
+    city ? '【ユーザーの地域】' + city + '（Homeの天気カードはこの地域）' : '',
     '【現在日時】' + new Date().toISOString(),
   ].filter(Boolean).join('\n');
 

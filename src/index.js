@@ -410,12 +410,14 @@ async function refreshHomes() {
 
 // ---------- events ----------
 
-async function replyWithPlaceholder(message, scope, text = message.content) {
-  const placeholder = await message.reply('Harkletが返信中……');
+async function sendAgentReply(message, scope, text = message.content) {
+  // typing indicator: expires in ~10s, resend every 8s until reply completes
+  const typing = setInterval(() => message.channel.sendTyping().catch(() => {}), 8000);
+  message.channel.sendTyping().catch(() => {});
   try {
     const result = await chatDsh(message.author.id, scope, text);
     const rows = actionRows(message.author.id, result.actions);
-    await placeholder.edit({
+    await message.reply({
       content: result.reply.slice(0, 1900),
       components: result.reply.length <= 1900 ? rows : [],
     });
@@ -424,8 +426,9 @@ async function replyWithPlaceholder(message, scope, text = message.content) {
       await message.reply({ content: result.reply.slice(i, i + 1900), components: last ? rows : [] });
     }
   } catch (e) {
-    const errMsg = '⚠️ エラー: ' + e.message;
-    await placeholder.edit(errMsg).catch(() => message.reply(errMsg).catch(() => {}));
+    await message.reply('⚠️ エラー: ' + e.message).catch(() => {});
+  } finally {
+    clearInterval(typing);
   }
 }
 function attachEvents(client) {
@@ -563,28 +566,28 @@ client.on('messageCreate', async (message) => {
 
   // メインチャンネル: 書き込むだけで会話
   if (message.guildId && message.channel.id === store.getMain(message.guildId)) {
-    await replyWithPlaceholder(message, 'main:' + message.channel.id);
+    await sendAgentReply(message, 'main:' + message.channel.id);
     return;
   }
 
   // パネルスレッド
   // DM: MessageContent Intent なしでも本文が届く
   if (!message.guildId) {
-    await replyWithPlaceholder(message, 'dm:' + message.author.id);
+    await sendAgentReply(message, 'dm:' + message.author.id);
     return;
   }
 
   // メンション: Intent なしでもBot宛メンションの本文は届く
   if (client.user && message.mentions?.has(client.user)) {
     const text = (message.cleanContent || message.content).trim();
-    if (text) await replyWithPlaceholder(message, 'mention:' + message.channelId, text);
+    if (text) await sendAgentReply(message, 'mention:' + message.channelId, text);
     return;
   }
 
   if (!message.channel.isThread()) return;
   const panel = store.getPanel(message.channel.id);
   if (!panel || message.author.id !== panel.user_id) return;
-  await replyWithPlaceholder(message, 'panel:' + message.channel.id);
+  await sendAgentReply(message, 'panel:' + message.channel.id);
 });
 
 client.once('clientReady', () => {
