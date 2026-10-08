@@ -50,7 +50,7 @@ If the Message Content intent is not granted, the bot automatically retries with
 | Command | Description |
 | --- | --- |
 | `/ask <question>` | Ask the assistant. Replies use your memory and may include action buttons |
-| `/model` | Embed + dropdowns to pick model & reasoning effort per user |
+| `/model` | Embed + dropdowns to pick model & effort per user (model list auto-fetched from provider) |
 | `/main set|off|show` | Set a main channel where plain messages talk to the assistant (Manage Server required) |
 | `/remember <text>` | Save a fact to long-term memory |
 | `/memory list|forget|clear` | List / delete memories |

@@ -6,7 +6,7 @@ import {
 } from 'discord.js';
 import { config } from './config.js';
 import { store } from './db.js';
-import { chat } from './llm.js';
+import { chat, listModels } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
 
 function makeClient(withContent) {
@@ -22,33 +22,36 @@ function makeClient(withContent) {
 let client = makeClient(true);
 
 // ---------- helpers ----------
-
-const MODEL_CHOICES = [
-  ['openai/gpt-4.1-mini', 'GPT-4.1 mini'],
-  ['openai/gpt-4.1', 'GPT-4.1'],
-  ['openai/o4-mini', 'o4-mini'],
-  ['anthropic/claude-sonnet-4-5', 'Claude Sonnet 4.5'],
-  ['anthropic/claude-haiku-4-5', 'Claude Haiku 4.5'],
-  ['google/gemini-2.5-flash', 'Gemini 2.5 Flash'],
-  ['google/gemini-2.5-pro', 'Gemini 2.5 Pro'],
-  ['x-ai/grok-code-fast-1', 'Grok Code Fast'],
+const FALLBACK_MODELS = [
+  'openai/gpt-4.1-mini', 'openai/gpt-4.1', 'openai/o4-mini',
+  'anthropic/claude-sonnet-4-5', 'anthropic/claude-haiku-4-5',
+  'google/gemini-2.5-flash', 'google/gemini-2.5-pro', 'x-ai/grok-code-fast-1',
 ];
+const SKIP_MODEL = /embed|whisper|tts|image|audio|dall-e|moderation|transcrib/i;
+const MODEL_RANK = /gpt|claude|gemini|grok|o4|deepseek|qwen|llama|mistral/i;
 
-function modelPanel(userId) {
+async function modelPanel(userId) {
   const s = store.getSettings(userId) ?? {};
+  const current = s.model || config.llm.model;
+  let models = await listModels();
+  if (!models.length) models = FALLBACK_MODELS;
+  models = models.filter(m => !SKIP_MODEL.test(m));
+  const choices = [current, ...models.filter(m => m !== current)
+    .sort((a, b) => Number(MODEL_RANK.test(b)) - Number(MODEL_RANK.test(a)) || a.localeCompare(b))]
+    .slice(0, 25);
   const embed = new EmbedBuilder()
     .setTitle('🧠 LLM 設定')
     .setColor(0x5865f2)
     .addFields(
-      { name: 'model', value: '`' + (s.model || config.llm.model) + '`', inline: true },
+      { name: 'model', value: '`' + current + '`', inline: true },
       { name: 'effort', value: s.effort || 'default', inline: true },
       { name: 'provider', value: config.llm.provider, inline: true },
     )
-    .setFooter({ text: '選択はあなた個人の設定です。/model reset でデフォルトに戻せます' });
+    .setFooter({ text: models.length + ' models from API / 選択はあなた個人の設定です' });
   const modelMenu = new StringSelectMenuBuilder()
     .setCustomId('model_sel')
-    .setPlaceholder('モデルを選択')
-    .addOptions(MODEL_CHOICES.map(([v, l]) => ({ label: l, value: v, default: (s.model || config.llm.model) === v })));
+    .setPlaceholder('モデルを選択 (' + choices.length + ')')
+    .addOptions(choices.map(v => ({ label: v.slice(0, 100), value: v, default: v === current })));
   const effortMenu = new StringSelectMenuBuilder()
     .setCustomId('effort_sel')
     .setPlaceholder('Reasoning effort')
@@ -131,7 +134,7 @@ const handlers = {
   ask: (i) => answer(i),
 
   async model(i) {
-    await i.reply({ ...modelPanel(i.user.id), ephemeral: true });
+    await i.reply({ ...(await modelPanel(i.user.id)), ephemeral: true });
   },
 
   async main(i) {
@@ -322,7 +325,7 @@ client.on('interactionCreate', async (interaction) => {
     } else if (interaction.isModalSubmit() && interaction.customId === 'model_modal') {
       const name = interaction.fields.getTextInputValue('model_name').trim();
       store.setModel(interaction.user.id, name);
-      await interaction.update(modelPanel(interaction.user.id));
+      await interaction.update(await modelPanel(interaction.user.id));
     } else if (interaction.isStringSelectMenu()) {
       if (interaction.customId === 'model_sel') {
         store.setModel(interaction.user.id, interaction.values[0]);
@@ -330,7 +333,7 @@ client.on('interactionCreate', async (interaction) => {
         const v = interaction.values[0];
         store.setEffort(interaction.user.id, v === 'default' ? null : v);
       }
-      await interaction.update(modelPanel(interaction.user.id));
+      await interaction.update(await modelPanel(interaction.user.id));
     }
   } catch (e) {
     console.error(e);

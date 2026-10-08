@@ -50,7 +50,7 @@ npm start
 | 命令 | 说明 |
 | --- | --- |
 | `/ask <question>` | 向助手提问。回复基于你的记忆，并可附带操作按钮 |
-| `/model` | Embed + 下拉菜单为每用户切换模型与推理强度 |
+| `/model` | Embed + 下拉菜单为每用户切换模型与推理强度（模型列表自动从API获取） |
 | `/main set|off|show` | 设置主频道，频道内直接发言即可与助手对话（需"管理服务器"权限） |
 | `/remember <text>` | 保存事实到长期记忆 |
 | `/memory list|forget|clear` | 查看 / 删除记忆 |

@@ -48,7 +48,7 @@ npm start
 | コマンド | 説明 |
 | --- | --- |
 | `/ask <question>` | アシスタントに質問。記憶を踏まえて回答し、実行ボタンを提案 |
-| `/model` | Embed + プルダウンでモデル＆Reasoning effortをユーザーごとに切替 |
+| `/model` | Embed + プルダウンでモデル＆Reasoning effortをユーザーごとに切替（モデル一覧はAPIから自動取得） |
 | `/main set|off|show` | メインチャンネル設定。そこへの書き込みはそのまま会話に（要「サーバー管理」権限） |
 | `/remember <text>` | 長期記憶に保存 |
 | `/memory list|forget|clear` | 記憶の一覧・削除 |

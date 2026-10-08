@@ -30,6 +30,34 @@ function resolveOpts(userId) {
   };
 }
 
+// --- model listing (auto-discovered from provider, cached 10min) ---
+const modelCache = { at: 0, list: [] };
+
+export async function listModels() {
+  if (Date.now() - modelCache.at < 600_000 && modelCache.list.length) return modelCache.list;
+  const llm = config.llm;
+  let ids = [];
+  try {
+    if (llm.provider === 'openai') {
+      const r = await fetch(`${llm.baseUrl}/models`, { headers: { Authorization: `Bearer ${llm.apiKey}` } });
+      if (r.ok) ids = (await r.json()).data?.map(m => m.id) ?? [];
+    } else if (llm.provider === 'anthropic') {
+      const r = await fetch(`${llm.baseUrl}/v1/models`, {
+        headers: { 'x-api-key': llm.apiKey, 'anthropic-version': '2023-06-01' },
+      });
+      if (r.ok) ids = (await r.json()).data?.map(m => m.id) ?? [];
+    } else if (llm.provider === 'google') {
+      const r = await fetch(`${llm.baseUrl}/models`, { headers: { 'x-goog-api-key': llm.apiKey } });
+      if (r.ok) ids = (await r.json()).models?.map(m => m.name?.replace(/^models\//, '')) ?? [];
+    }
+  } catch { /* fall through */ }
+  if (ids.length) {
+    modelCache.at = Date.now();
+    modelCache.list = ids;
+  }
+  return modelCache.list;
+}
+
 // Returns { url, init, extract } for the configured provider.
 // effort mapping:
 //   openai/openrouter -> reasoning_effort / reasoning:{effort}
