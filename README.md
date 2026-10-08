@@ -14,10 +14,10 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | --- | --- |
 | Chat with memory | `/ask` + per-user long-term memory (SQLite). Key facts are auto-extracted from conversation |
 | Action Buttons | AI replies come with executable buttons such as "set reminder" and "save to memory" |
-| Proactive assistance | Scheduled reminder delivery + daily morning briefing (`/brief`) |
+| Proactive assistance | Ask in chat for reminders and a daily morning briefing |
 | Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
-| Projects | `/project` — a topic-scoped thread for splitting a chat by subject (legacy alias: `/panel`) |
-| Agent browser | Ask in chat for Web work; Harklet can start a per-user Quicksand Linux VM and report the result. `/computer run|view|watch|stop` offers direct control; [setup and limits](docs/browser-agent.md) |
+| Projects | Ask in chat or use the Projects button to create a topic-scoped thread |
+| Agent browser | Ask in chat for Web work; Harklet can start a per-user Quicksand Linux VM and report the result. `/computer view|watch|stop` controls the viewer and session; [setup and limits](docs/browser-agent.md) |
 | Live screen | A read-only noVNC link is sent by DM when browser work starts; `/computer watch` shows it privately. The link works only on the Bot's computer. |
 
 Gmail and GitHub are currently reachable only as websites in the agent browser after sign-in. Native account connectors and OAuth are not implemented. The GitHub Home card uses a separate token setting for a summary and does not give the chat agent GitHub API access.
@@ -54,19 +54,16 @@ If the Message Content intent is not granted, the bot automatically retries with
 
 ## Commands
 
+For everyday use, write in the chat channel created by `/main set`, DM Harklet, or mention it. Ask for Web work, reminders, memories, projects, and briefings in ordinary language. `/ask` is a shortcut when you want a private reply.
+
 | Command | Description |
 | --- | --- |
 | `/ask <question>` | Ask the assistant. Replies use your memory and may include action buttons |
 | `/model` | Embed + dropdowns to pick model & effort per user (list auto-fetched from provider; staged until you press 決定/Apply) |
 | `/main set|off|show` | Set the main channel (plain messages = chat). `set` also creates a **Harklet** category with chat/home/projects channels (needs Manage Channels; Manage Server required) |
-| `/remember <text>` | Save a fact to long-term memory |
 | `/memory list|forget|clear` | List / delete memories |
-| `/remind add|list|cancel` | Reminders. Parses `in 10 min`, `tomorrow 9am`, `18:30`, `2026-10-09 09:00`, Japanese (`10分後` `明日9時`), etc. |
-| `/project <topic>` | Create a project thread to split the chat by subject. Just type inside to keep chatting |
-| `/panel <topic>` | Same as `/project` (kept for compatibility) |
 | `/home open|cards|off` | Place/manage custom cards/remove the Home dashboard (auto-refresh every 30 min). AI can offer an Add to Home button that creates dynamic cards |
-| `/brief on|off|now` | Configure / trigger the daily briefing |
-| `/ping` | Health check |
+| `/computer view|watch|stop` | Inspect or stop a browser task started from chat |
 
 ## LLM backend
 

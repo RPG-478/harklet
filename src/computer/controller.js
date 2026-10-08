@@ -188,7 +188,7 @@ async function showViewer(interaction) {
   const userId = interaction.user.id;
   const s = sessions.get(userId);
   if (!s) {
-    await interaction.editReply('作業用の画面がありません。/computer run で開始してください');
+    await interaction.editReply('作業用の画面がありません。チャットでWeb作業を依頼してください');
     return;
   }
   const shot = await browser.screenshot(s.id);
@@ -199,7 +199,7 @@ async function showViewer(interaction) {
 async function showLiveViewer(interaction) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const s = sessions.get(interaction.user.id);
-  if (!s) return interaction.editReply('作業用の画面がありません。チャットか /computer run で開始してください');
+  if (!s) return interaction.editReply('作業用の画面がありません。チャットでWeb作業を依頼してください');
   const url = browser.viewerUrl(s.id);
   if (!url) return interaction.editReply('このブラウザではライブ画面を利用できません。/computer view で静止画を確認してください');
   bumpIdle(interaction.user.id);

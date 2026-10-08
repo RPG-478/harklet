@@ -31,7 +31,7 @@ export function secretModal(reqId, fields) {
 export function viewerPayload(png) {
   const embed = new EmbedBuilder()
     .setTitle('🖥️ 作業中の画面')
-    .setDescription('現在の専用ブラウザ画面です。操作は /computer run から依頼できます。')
+    .setDescription('現在の専用ブラウザ画面です。作業はチャットから依頼できます。')
     .setImage('attachment://harklet-browser.png')
     .setColor(0x5865f2);
   return { embeds: [embed], files: [new AttachmentBuilder(png, { name: 'harklet-browser.png' })] };

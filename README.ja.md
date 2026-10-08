@@ -2,7 +2,7 @@
 
 # harklet
 
-普段のチャットでWeb作業を頼むと、Agentが必要に応じてユーザー専用のQuicksand Linux VM内でブラウザを操作します。Dockerは不要です。`/computer` は直接操作用の補助コマンドです。導入方法と権限の範囲は[専用ブラウザの説明](docs/browser-agent.md)を参照してください。
+普段のチャットでWeb作業を頼むと、Agentが必要に応じてユーザー専用のQuicksand Linux VM内でブラウザを操作します。Dockerは不要です。`/computer` は画面の確認と停止に使います。導入方法と権限の範囲は[専用ブラウザの説明](docs/browser-agent.md)を参照してください。
 
 作業中のライブ画面は本人へのDMに届くURL、または`/computer watch`で見られます。Botと同じPCからだけ開ける閲覧専用noVNCです。
 
@@ -18,9 +18,9 @@ Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。
 | --- | --- |
 | 記憶を持つチャット | `/ask` + ユーザーごとの長期記憶(SQLite)。会話から重要な事実を自動抽出して保存 |
 | Action Buttons | AI の応答に「リマインダー設定」「記憶に保存」などの実行ボタンが付く |
-| プロアクティブ支援 | リマインダー配信 + 毎朝のモーニングブリーフ(`/brief`) |
+| プロアクティブ支援 | チャットで依頼できるリマインダー配信と毎朝のモーニングブリーフ |
 | Home | `/home` — 常駐ダッシュボード。今日の一手・天気・GitHub概要・予定・記憶をカード表示。30分ごと自動更新 |
-| Projects | `/project` — チャットを話題で分割するスレッド(互換: `/panel`) |
+| Projects | チャットやProjectsボタンから、話題別スレッドを作成 |
 | Agentブラウザ | チャットでWeb作業を依頼すると、必要に応じて専用VMのブラウザを使い、進捗と結果を通知 |
 
 GmailやGitHubは、VM内でログインしたWebサイトとして操作できます。専用のアカウント接続やOAuth連携はまだありません。
@@ -55,19 +55,16 @@ npm start
 
 ## コマンド
 
+普段は`/main set`で作ったchatチャンネル、DM、またはメンションで普通に話しかけてください。Web作業、記憶、リマインダー、プロジェクト、ブリーフィングを会話から頼めます。`/ask`は個別に返答がほしいときの近道です。
+
 | コマンド | 説明 |
 | --- | --- |
 | `/ask <question>` | アシスタントに質問。記憶を踏まえて回答し、実行ボタンを提案 |
 | `/model` | Embed + プルダウンでモデル＆Reasoning effortをユーザーごとに切替。一覧はAPIから自動取得し、選択は「決定」ボタンで確定 |
 | `/main set|off|show` | メインチャンネル設定。`set` で Harklet カテゴリ(chat/home/projects)も自動生成（要「サーバー管理」+Botに「チャンネル管理」） |
-| `/remember <text>` | 長期記憶に保存 |
 | `/memory list|forget|clear` | 記憶の一覧・削除 |
-| `/remind add|list|cancel` | リマインダー。`10分後` `明日9時` `18:30` `2026-10-09 09:00` `in 10 min` `tomorrow 9am` などを解釈 |
-| `/project <topic>` | プロジェクト(話題別スレッド)を作成。内部は書き込むだけで会話が続く |
-| `/panel <topic>` | `/project` と同じ(互換用) |
 | `/home open|cards|off` | Home設置/カスタムカード管理/解除(30分ごと自動更新・更新ボタンあり)。AI提案の「ホームに追加」ボタンで動的カードが増える |
-| `/brief on|off|now` | 毎朝のブリーフィング設定・手動生成 |
-| `/ping` | 生存確認 |
+| `/computer view|watch|stop` | チャットから始めたブラウザ作業の画面確認・停止 |
 
 ## LLM バックエンド
 

@@ -176,7 +176,7 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
 
   if (a.kind === "remind") {
     const due = Date.parse(arg ?? "");
-    if (Number.isNaN(due)) return "日時を解釈できませんでした。/remind で直接指定してください。";
+    if (Number.isNaN(due)) return "日時を解釈できませんでした。日時を添えて言い直してください。";
     const id = store.addReminder(userId, channel?.id ?? null, a.label, due);
     return `⏰ リマインダー #${id}: 「${a.label}」→ ${fmtTs(due)}`;
   }
@@ -336,7 +336,7 @@ const handlers = {
         const m = await homeCh.send(await homePayload(i.user.id, actionRows));
         store.setHome(i.user.id, homeCh.id, m.id);
         await projCh.send({
-          content: '📁 **プロジェクト** — 話題ごとの会話スレッド。\n下のボタンか `/project <topic>` で新しいプロジェクトを作成します。',
+          content: '📁 **プロジェクト** — 話題ごとの会話スレッド。\n下のボタンか、チャットで頼んで新しいプロジェクトを作成します。',
           components: [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('proj_new').setLabel('新規プロジェクト').setEmoji('➕').setStyle(ButtonStyle.Primary),
           )],
@@ -372,7 +372,7 @@ const handlers = {
       const ms = store.listMemories(i.user.id);
       const body = ms.length
         ? ms.map(m => `#${m.id} ${m.content}`).join('\n')
-        : 'まだ記憶はありません。`/remember` か会話から自動で貯まります。';
+        : 'まだ記憶はありません。チャットで「これを覚えて」と頼むこともできます。';
       return i.reply({ content: body.slice(0, 1900), flags: MessageFlags.Ephemeral });
     }
     if (sub === 'forget') {
