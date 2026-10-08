@@ -2,6 +2,8 @@
 
 # harklet
 
+`/computer` はAgent専用ブラウザでWeb操作を行います。Dockerは不要です。導入方法と権限の範囲は[専用ブラウザの説明](docs/browser-agent.md)を参照してください。
+
 **Languages:** [English](./README.md) | 日本語 | [中文](./README.zh.md)
 
 Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。

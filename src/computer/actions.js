@@ -2,7 +2,7 @@ import { isSecretName } from './names.js';
 
 const KEY_RE = /^[a-zA-Z0-9_+]{1,20}$/;
 const TYPES = new Set(['click', 'double_click', 'right_click', 'move', 'scroll', 'type', 'type_secret',
-  'click_element', 'key', 'wait', 'request_secrets', 'done', 'fail']);
+  'click_element', 'navigate', 'key', 'wait', 'request_secrets', 'done', 'fail']);
 
 const bad = error => ({ ok: false, error });
 const good = action => ({ ok: true, action });
@@ -21,6 +21,14 @@ export function parseAction(raw, { width, height, elementCount = 0 }) {
   const t = raw.action;
   if (!TYPES.has(t)) return bad('unknown action: ' + String(t));
   switch (t) {
+    case 'navigate': {
+      if (typeof raw.url !== 'string' || raw.url.length > 2048) return bad('navigate needs an http(s) URL');
+      try {
+        const u = new URL(raw.url);
+        if (!['http:', 'https:'].includes(u.protocol)) return bad('navigate needs an http(s) URL');
+        return good({ action: t, url: u.href });
+      } catch { return bad('navigate needs an http(s) URL'); }
+    }
     case 'click':
     case 'double_click':
     case 'right_click':

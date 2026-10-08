@@ -3,5 +3,6 @@ node_modules/
 harklet.db
 *.log
 scratch/
+browser-data/
 sidecar/.venv/
 sidecar/__pycache__/

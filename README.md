@@ -17,6 +17,7 @@ It brings Hark Pro's core experience — **an assistant with persistent memory, 
 | Proactive assistance | Scheduled reminder delivery + daily morning briefing (`/brief`) |
 | Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
 | Projects | `/project` — a topic-scoped thread for splitting a chat by subject (legacy alias: `/panel`) |
+| Agent browser | `/computer run|view|stop` — a dedicated browser profile for each user; [setup and limits](docs/browser-agent.md) |
 
 ## Setup
 

@@ -1,7 +1,7 @@
 import { MessageFlags } from 'discord.js';
 import { config } from '../config.js';
 import { vault, vaultReady } from './vault.js';
-import { sidecar } from './sidecar.js';
+import { browser } from './browser.js';
 import { makeDecider } from './vision.js';
 import { runComputerTask } from './loop.js';
 import { secretRequestPayload, secretModal, viewerPayload } from './ui.js';
@@ -87,15 +87,18 @@ async function runTask(userId, s, task, abort, channel, post) {
       userId,
       task,
       sessionId: s.id,
-      sidecar: retryingSidecar(sidecar),
-      vault,
+      sidecar: retryingSidecar(browser),
+      vault: {
+        listSecretNames: id => vault.listSecretNames(id, browser.origin(s.id)),
+        getSecret: (id, name) => vault.getSecret(id, name, browser.origin(s.id)),
+      },
       decide: retrying(makeDecider({
         provider: config.llm.provider,
         baseUrl: config.llm.baseUrl,
         apiKey: config.llm.apiKey,
         model: visionModel(),
       })),
-      requestSecrets: ({ message, fields }) => requestSecrets(userId, channel, message, fields),
+      requestSecrets: ({ message, fields }) => requestSecrets(userId, s.id, channel, message, fields),
       progress: post,
       signal: abort.signal,
     });
@@ -126,7 +129,7 @@ async function ensureSession(userId) {
     bumpIdle(userId);
     return existing;
   }
-  const created = await sidecar.createSession();
+  const created = await browser.createSession(userId);
   const s = { id: created.id, idleTimer: null };
   sessions.set(userId, s);
   bumpIdle(userId);
@@ -152,7 +155,7 @@ async function destroySession(userId) {
   if (!s) return;
   sessions.delete(userId);
   clearTimeout(s.idleTimer);
-  await sidecar.destroySession(s.id).catch(() => {});
+  await browser.destroySession(s.id).catch(() => {});
 }
 
 async function showViewer(interaction) {
@@ -163,9 +166,9 @@ async function showViewer(interaction) {
     await interaction.editReply('作業用の画面がありません。/computer run で開始してください');
     return;
   }
-  const url = await sidecar.viewerUrl(s.id);
+  const shot = await browser.screenshot(s.id);
   bumpIdle(userId);
-  await interaction.editReply(viewerPayload(url));
+  await interaction.editReply(viewerPayload(Buffer.from(shot.png_base64, 'base64')));
 }
 
 async function stopRun(interaction) {
@@ -177,8 +180,10 @@ async function stopRun(interaction) {
   await interaction.editReply(had ? '画面を破棄しました' : '作業用の画面はありません');
 }
 
-function requestSecrets(userId, channel, message, fields) {
+function requestSecrets(userId, sessionId, channel, message, fields) {
   const reqId = Date.now().toString(36) + '-' + (++seq).toString(36);
+  const origin = browser.origin(sessionId);
+  if (!origin?.startsWith('https://')) return Promise.reject(new Error('ログイン情報はHTTPSのサイトにのみ保存できます'));
   return new Promise(resolve => {
     if (!channel) {
       resolve(null);
@@ -188,8 +193,8 @@ function requestSecrets(userId, channel, message, fields) {
       pending.delete(reqId);
       resolve(null);
     }, REQUEST_TIMEOUT_MS);
-    pending.set(reqId, { userId, fields, timer, resolve });
-    Promise.resolve(channel.send(secretRequestPayload(reqId, message, fields))).catch(() => {
+    pending.set(reqId, { userId, fields, origin, timer, resolve });
+    Promise.resolve(channel.send(secretRequestPayload(reqId, message, fields, origin))).catch(() => {
       clearTimeout(timer);
       pending.delete(reqId);
       resolve(null);
@@ -211,7 +216,7 @@ async function handleSecretModal(interaction) {
   if (!req || req.userId !== interaction.user.id) throw new Error('この入力依頼は無効です');
   const values = req.fields.map(f => ({ name: f.name, value: interaction.fields.getTextInputValue(f.name) }));
   if (values.some(v => !v.value)) throw new Error('空欄があります。もう一度入力してください');
-  for (const v of values) vault.setSecret(req.userId, v.name, v.value);
+  for (const v of values) vault.setSecret(req.userId, v.name, v.value, req.origin);
   clearTimeout(req.timer);
   pending.delete(reqId);
   req.resolve(values.map(v => v.name));

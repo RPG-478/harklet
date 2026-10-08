@@ -8,6 +8,7 @@ const COORDINATE_ACTIONS = new Set(['click', 'double_click', 'right_click', 'mov
 
 function toBridge(a) {
   switch (a.action) {
+    case 'navigate': return { type: 'navigate', url: a.url };
     case 'click':
     case 'double_click':
     case 'right_click':
@@ -36,6 +37,7 @@ async function readElements(sidecar, sessionId) {
 
 function describe(a) {
   switch (a.action) {
+    case 'navigate': return 'navigate ' + a.url;
     case 'click':
     case 'double_click':
     case 'right_click':
@@ -58,7 +60,7 @@ function describe(a) {
 // Problems on the model or screen side are written into the history, so the next
 // turn can see them. A rejected image switches the run to element-only control.
 // The run stops only after several turns in a row fail.
-// Secret values only ever go from the vault to sidecar.act (type_secret). They are
+// Secret values only ever go from the vault to the browser action (type_secret). They are
 // never passed to decide(), never put in history and never returned in the result.
 export async function runComputerTask(opts) {
   const {

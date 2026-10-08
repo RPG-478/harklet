@@ -2,6 +2,8 @@
 
 # harklet
 
+`/computer` uses a dedicated browser profile for web tasks and does not require Docker. See [setup and limitations](docs/browser-agent.md).
+
 **Languages:** [English](./README.md) | [日本語](./README.ja.md) | 中文
 
 受 [Hark Pro](https://www.hark.com) 启发的个人 AI 助手 Discord Bot。

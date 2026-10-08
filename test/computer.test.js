@@ -22,11 +22,15 @@ test('secret names are restricted', () => {
 });
 
 test('vault round-trips and isolates users', () => {
-  setSecret('u1', 'site_password', 'p@ss w0rd!');
-  assert.equal(getSecret('u1', 'site_password'), 'p@ss w0rd!');
-  assert.equal(getSecret('u2', 'site_password'), null);
-  assert.deepEqual(listSecretNames('u1'), ['site_password']);
-  assert.throws(() => setSecret('u1', 'Bad Name', 'x'));
+  setSecret('u1', 'site_password', 'p@ss w0rd!', 'https://example.com');
+  assert.equal(getSecret('u1', 'site_password', 'https://example.com'), 'p@ss w0rd!');
+  assert.equal(getSecret('u1', 'site_password', 'https://other.example'), null);
+  setSecret('u1', 'site_password', 'other password', 'https://other.example');
+  assert.equal(getSecret('u1', 'site_password', 'https://example.com'), 'p@ss w0rd!');
+  assert.equal(getSecret('u1', 'site_password', 'https://other.example'), 'other password');
+  assert.equal(getSecret('u2', 'site_password', 'https://example.com'), null);
+  assert.deepEqual(listSecretNames('u1', 'https://example.com'), ['site_password']);
+  assert.throws(() => setSecret('u1', 'Bad Name', 'x', 'https://example.com'));
 });
 
 test('parseAction accepts valid replies and rejects bad ones', () => {
@@ -125,6 +129,6 @@ test('Discord payloads build without a client', () => {
   assert.equal(req.components[0].custom_id, 'cu_secret:r1');
   const modal = secretModal('r1', [{ name: 'site_password', label: 'パスワード' }]).toJSON();
   assert.equal(modal.custom_id, 'cu_secret_modal:r1');
-  const view = viewerPayload('http://127.0.0.1:9/viewer').components[0].toJSON();
-  assert.equal(view.components[0].url, 'http://127.0.0.1:9/viewer');
+  const view = viewerPayload(Buffer.from('PNGDATA'));
+  assert.equal(view.files[0].name, 'harklet-browser.png');
 });
