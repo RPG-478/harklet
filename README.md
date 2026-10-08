@@ -43,14 +43,14 @@ npm run doctor     # verify token, LLM endpoint, and DB
 npm start
 ```
 
-If the Message Content intent is not granted, the bot automatically retries without it (panel free-chat is disabled) and logs a notice.
+If the Message Content intent is not granted, the bot automatically retries without it and logs a notice. Channel free-chat is unavailable in that mode, but **DMs and @mentions still work** — Discord delivers their content without the intent.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
 | `/ask <question>` | Ask the assistant. Replies use your memory and may include action buttons |
-| `/model` | Embed + dropdowns to pick model & effort per user (model list auto-fetched from provider) |
+| `/model` | Embed + dropdowns to pick model & effort per user (list auto-fetched from provider; staged until you press 決定/Apply) |
 | `/main set|off|show` | Set a main channel where plain messages talk to the assistant (Manage Server required) |
 | `/remember <text>` | Save a fact to long-term memory |
 | `/memory list|forget|clear` | List / delete memories |
@@ -74,13 +74,15 @@ Three provider styles are supported; the active one is auto-detected from which 
 ## How it works
 
 - `src/index.js` — Discord events, commands, buttons, schedulers
-- `src/llm.js` — OpenAI-compatible client; parses structured JSON {reply, actions, remember}
+- `src/dsh-agent.js` — the conversation engine: DeepSeek Harness (DSH) agent loop embedded in-process (cordis plugins → sessions → agent loop), bridged to OpenAI-compatible / Anthropic / Google APIs via a custom `LlmAdapter`. Parses the structured JSON `{reply, actions, remember}` contract
+- `src/llm.js` — model list auto-discovery per provider
 - `src/db.js` — persistence via `node:sqlite` (memories, history, reminders, settings)
 - `src/schedule.js` — natural-language-ish time parser
 
 ## Notes
 
 - The Message Content Intent requires Discord verification once the bot exceeds **10,000 unique users** (June 2026 revision). Below that, the Developer Portal toggle is enough.
+- While the model is thinking, the bot posts `Harkletが返信中……` and edits that message in place once the answer arrives.
 - Auto-extracted memories can misfire. Manage them with `/memory list` and `/memory forget`.
 
 ## License

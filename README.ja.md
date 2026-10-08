@@ -48,7 +48,7 @@ npm start
 | コマンド | 説明 |
 | --- | --- |
 | `/ask <question>` | アシスタントに質問。記憶を踏まえて回答し、実行ボタンを提案 |
-| `/model` | Embed + プルダウンでモデル＆Reasoning effortをユーザーごとに切替（モデル一覧はAPIから自動取得） |
+| `/model` | Embed + プルダウンでモデル＆Reasoning effortをユーザーごとに切替。一覧はAPIから自動取得し、選択は「決定」ボタンで確定 |
 | `/main set|off|show` | メインチャンネル設定。そこへの書き込みはそのまま会話に（要「サーバー管理」権限） |
 | `/remember <text>` | 長期記憶に保存 |
 | `/memory list|forget|clear` | 記憶の一覧・削除 |
@@ -72,13 +72,16 @@ npm start
 ## 仕組み
 
 - `src/index.js` — Discord イベント・コマンド・ボタン・スケジューラ
-- `src/llm.js` — OpenAI 互換チャット API。JSON 出力 {reply, actions, remember} をパース
+- `src/dsh-agent.js` — 会話エンジン。DeepSeek Harness (DSH) のエージェントループをプロセス内に組み込み(cordis プラグイン → セッション → エージェントループ)、独自 `LlmAdapter` で OpenAI互換 / Anthropic / Google 各APIにブリッジ。構造化JSON `{reply, actions, remember}` をパース
+- `src/llm.js` — プロバイダ別のモデル一覧自動取得
 - `src/db.js` — `node:sqlite` による永続化(記憶・会話履歴・リマインダー・設定)
 - `src/schedule.js` — 自然言語ふう時刻パーサ
 
 ## 注意
 
 - Message Content Intent を使うため、Bot が **1万ユニークユーザー** を超える場合は Discord の審査が必要です(2026/6 改訂)。それ未満なら Portal のトグルで動きます。
+- 応答生成中は「Harkletが返信中……」というプレースホルダを表示し、回答が届いたらそのメッセージを書き換えます。
+- Message Content Intent が未許可でも、DM と Botへのメンションは本文が届くため会話できます(チャンネル内の自由会話のみ不可)。
 - AI の自動記憶抽出は誤爆しえます。`/memory list` / `forget` で管理してください。
 
 ## License
