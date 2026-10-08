@@ -64,7 +64,7 @@ function describe(a) {
 // never passed to decide(), never put in history and never returned in the result.
 export async function runComputerTask(opts) {
   const {
-    userId, task, sessionId, browser, vault, decide, requestSecrets, progress,
+    userId, task, sessionId, browser, vault, decide, requestSecrets, chooseAuthMethod, shareAuthQr, progress,
     signal, maxSteps = 25, deadlineMs = 15 * 60 * 1000, settleMs = 700,
     sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   } = opts;
@@ -156,6 +156,17 @@ export async function runComputerTask(opts) {
       const saved = await requestSecrets({ message: a.message, fields: a.fields });
       if (!saved) return { status: 'credentials_timeout', steps: step };
       note(step + '. ログイン情報を保存 (' + saved.join(', ') + ', 値は非表示)');
+    } else if (a.action === 'choose_auth_method') {
+      const selected = await chooseAuthMethod?.({ message: a.message, options: a.options });
+      if (!selected) return { status: 'credentials_timeout', steps: step };
+      const chosen = a.options.find(o => o.id === selected);
+      if (!chosen) { note(step + '. 認証方法の選択が無効でした'); continue; }
+      note(step + '. 利用者が選んだ認証方法: ' + chosen.label + ' (' + chosen.id + ')。画面上でこの方法を選択してください');
+    } else if (a.action === 'share_auth_qr') {
+      if (!imageSent) { note(step + '. 画像がないため認証画面を送れませんでした'); continue; }
+      const shared = await shareAuthQr?.({ png: Buffer.from(shot.png_base64, 'base64'), message: a.message });
+      if (!shared) return { status: 'failed', reason: '認証画面のDM確認ができませんでした', steps: step };
+      note(step + '. 認証画面を本人のDiscord DMで確認しました。画面の変化を確認してください');
     } else if (a.action === 'type_secret') {
       try {
         const value = vault.takeSecret ? vault.takeSecret(userId, a.name) : vault.getSecret(userId, a.name);

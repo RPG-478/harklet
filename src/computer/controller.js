@@ -4,7 +4,7 @@ import { vault, vaultReady } from './vault.js';
 import { browser } from './browser.js';
 import { makeDecider } from './vision.js';
 import { runComputerTask } from './loop.js';
-import { secretRequestPayload, secretModal } from './ui.js';
+import { secretRequestPayload, secretModal, authMethodPayload, authQrPayload } from './ui.js';
 import { retrying, retryingBrowser } from './retry.js';
 import { SessionSecrets } from './session-secrets.js';
 
@@ -78,6 +78,14 @@ export async function startComputerTask({ userId, task, channel, post: customPos
     running.delete(userId);
     throw err;
   }
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('cu_auth:')) {
+    await guard(interaction, () => handleAuthSelection(interaction));
+    return true;
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('cu_qr:')) {
+    await guard(interaction, () => handleQrContinue(interaction));
+    return true;
+  }
   const post = customPost ?? (text => channel?.send(text).catch(() => {}));
   await post('🖥️ <@' + userId + '> の作業を開始します: ' + task.slice(0, 200));
   const viewer = browser.viewerUrl(s.id);
@@ -118,6 +126,8 @@ async function runTask(userId, s, task, abort, channel, post, onDone) {
         model: visionModel(),
       })),
       requestSecrets: ({ message, fields }) => requestSecrets(userId, s.id, channel, message, fields),
+      chooseAuthMethod: ({ message, options }) => chooseAuthMethod(userId, s.id, channel, message, options),
+      shareAuthQr: ({ png, message }) => shareAuthQr(userId, channel, png, message),
       progress: post,
       signal: abort.signal,
     });
@@ -211,7 +221,7 @@ async function requestSecrets(userId, sessionId, channel, message, fields) {
         pending.delete(reqId);
         resolve(null);
       }, REQUEST_TIMEOUT_MS);
-      pending.set(reqId, { userId, fields, origin, timer, resolve });
+      pending.set(reqId, { userId, fields, origin, timer, resolve, kind: 'secret' });
       Promise.resolve(channel.send(secretRequestPayload(reqId, message, fields, origin))).catch(() => {
         clearTimeout(timer);
         pending.delete(reqId);
@@ -223,10 +233,65 @@ async function requestSecrets(userId, sessionId, channel, message, fields) {
   }
 }
 
+async function chooseAuthMethod(userId, sessionId, channel, message, options) {
+  const reqId = Date.now().toString(36) + '-' + (++seq).toString(36);
+  const dismiss = await browser.showDiscordPrompt(sessionId).catch(() => null);
+  try {
+    return await new Promise(resolve => {
+      if (!channel) { resolve(null); return; }
+      const timer = setTimeout(() => { pending.delete(reqId); resolve(null); }, REQUEST_TIMEOUT_MS);
+      pending.set(reqId, { userId, options, timer, resolve, kind: 'auth' });
+      Promise.resolve(channel.send(authMethodPayload(reqId, message, options))).catch(() => {
+        clearTimeout(timer); pending.delete(reqId); resolve(null);
+      });
+    });
+  } finally { await dismiss?.(); }
+}
+
+async function shareAuthQr(userId, channel, png, message) {
+  const reqId = Date.now().toString(36) + '-' + (++seq).toString(36);
+  try {
+    const user = await channel?.client?.users?.fetch(userId);
+    if (!user) return false;
+    return await new Promise(resolve => {
+      const timer = setTimeout(() => { pending.delete(reqId); resolve(false); }, REQUEST_TIMEOUT_MS);
+      pending.set(reqId, { userId, timer, resolve, kind: 'qr' });
+      Promise.resolve(user.send(authQrPayload(reqId, png, message))).catch(() => {
+        clearTimeout(timer); pending.delete(reqId); resolve(false);
+      });
+    });
+  } catch { return false; }
+}
+
+async function handleQrContinue(interaction) {
+  const reqId = interaction.customId.slice('cu_qr:'.length);
+  const req = pending.get(reqId);
+  if (!req || req.kind !== 'qr') throw new Error('この確認は期限切れか、すでに完了しています');
+  if (req.userId !== interaction.user.id) throw new Error('この確認は依頼した本人だけができます');
+  clearTimeout(req.timer);
+  pending.delete(reqId);
+  req.resolve(true);
+  await interaction.reply({ content: '確認しました。Agentが作業を続けます。', flags: EPHEMERAL });
+}
+
+async function handleAuthSelection(interaction) {
+  const reqId = interaction.customId.slice('cu_auth:'.length);
+  const req = pending.get(reqId);
+  if (!req || req.kind !== 'auth') throw new Error('この選択は期限切れか、すでに完了しています');
+  if (req.userId !== interaction.user.id) throw new Error('この選択は依頼した本人だけができます');
+  const selected = interaction.values[0];
+  const chosen = req.options.find(o => o.id === selected);
+  if (!chosen) throw new Error('認証方法を選び直してください');
+  clearTimeout(req.timer);
+  pending.delete(reqId);
+  req.resolve(selected);
+  await interaction.reply({ content: '🔐 ' + chosen.label + ' を選びました。Agentが画面で続けます。', flags: EPHEMERAL });
+}
+
 async function handleSecretButton(interaction) {
   const reqId = interaction.customId.slice('cu_secret:'.length);
   const req = pending.get(reqId);
-  if (!req) throw new Error('この依頼は期限切れか、すでに完了しています');
+  if (!req || req.kind !== 'secret') throw new Error('この依頼は期限切れか、すでに完了しています');
   if (req.userId !== interaction.user.id) throw new Error('この入力は依頼した本人だけができます');
   await interaction.showModal(secretModal(reqId, req.fields));
 }
@@ -234,7 +299,7 @@ async function handleSecretButton(interaction) {
 async function handleSecretModal(interaction) {
   const reqId = interaction.customId.slice('cu_secret_modal:'.length);
   const req = pending.get(reqId);
-  if (!req || req.userId !== interaction.user.id) throw new Error('この入力依頼は無効です');
+  if (!req || req.kind !== 'secret' || req.userId !== interaction.user.id) throw new Error('この入力依頼は無効です');
   const values = req.fields.map(f => ({ name: f.name, value: interaction.fields.getTextInputValue(f.name) }));
   if (values.some(v => !v.value)) throw new Error('空欄があります。もう一度入力してください');
   const s = sessions.get(req.userId);

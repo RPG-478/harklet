@@ -11,7 +11,7 @@ const { redact, isSecretName } = await import('../src/computer/names.js');
 const { setSecret, getSecret, listSecretNames } = await import('../src/computer/vault.js');
 const { runComputerTask } = await import('../src/computer/loop.js');
 const { makeDecider, parseJsonObject, extractText } = await import('../src/computer/vision.js');
-const { secretRequestPayload, secretModal, viewerPayload } = await import('../src/computer/ui.js');
+const { secretRequestPayload, secretModal, viewerPayload, authMethodPayload, authQrPayload } = await import('../src/computer/ui.js');
 
 const SCREEN = { width: 800, height: 600 };
 
@@ -43,6 +43,31 @@ test('parseAction accepts valid replies and rejects bad ones', () => {
   assert.equal(parseAction(null, SCREEN).ok, false);
   const req = parseAction({ action: 'request_secrets', fields: [{ name: 'site_address', label: 'アドレス' }] }, SCREEN);
   assert.equal(req.ok, true);
+  assert.equal(parseAction({ action: 'choose_auth_method', options: [{ id: 'totp', label: '認証アプリ' }, { id: 'email', label: 'メール' }] }, SCREEN).ok, true);
+  assert.equal(parseAction({ action: 'choose_auth_method', options: [{ id: 'totp', label: 'A' }, { id: 'totp', label: 'B' }] }, SCREEN).ok, false);
+  assert.equal(parseAction({ action: 'share_auth_qr' }, SCREEN).ok, true);
+});
+
+test('selected 2FA method reaches the agent and QR screenshot goes only to the handoff', async () => {
+  const script = [
+    { action: 'choose_auth_method', options: [{ id: 'totp', label: '認証アプリ' }, { id: 'email', label: 'メール' }] },
+    { action: 'share_auth_qr', message: '認証アプリの設定QRです' },
+    { action: 'done', summary: '続行' },
+  ];
+  const seen = [];
+  const shared = [];
+  const result = await runComputerTask({ userId: 'u', task: 'ログイン', sessionId: 's',
+    browser: { screenshot: async () => ({ png_base64: Buffer.from('image').toString('base64'), width: 800, height: 600 }), elements: async () => ({ elements: [] }) },
+    vault: { listSecretNames: () => [], getSecret: () => null },
+    decide: async args => { seen.push(args); return script.shift(); },
+    requestSecrets: async () => null,
+    chooseAuthMethod: async ({ options }) => { assert.equal(options[1].id, 'email'); return 'email'; },
+    shareAuthQr: async data => { shared.push(data); return true; },
+    settleMs: 0, sleep: async () => {},
+  });
+  assert.equal(result.status, 'done');
+  assert.ok(seen[1].history.some(line => line.includes('メール')));
+  assert.equal(shared[0].png.toString(), 'image');
 });
 
 test('redact hides every known value', () => {
@@ -131,4 +156,9 @@ test('Discord payloads build without a client', () => {
   assert.equal(modal.custom_id, 'cu_secret_modal:r1');
   const view = viewerPayload(Buffer.from('PNGDATA'));
   assert.equal(view.files[0].name, 'harklet-browser.png');
+  const methods = authMethodPayload('r2', '選択', [{ id: 'totp', label: '認証アプリ' }, { id: 'email', label: 'メール' }]);
+  assert.equal(methods.components[0].toJSON().components[0].custom_id, 'cu_auth:r2');
+  const qr = authQrPayload('r3', Buffer.from('PNGDATA'), 'QR');
+  assert.equal(qr.files[0].name, 'harklet-auth.png');
+  assert.equal(qr.components[0].toJSON().components[0].custom_id, 'cu_qr:r3');
 });

@@ -15,6 +15,8 @@ export const SYSTEM_PROMPT = [
   'key: {"action": "key", "keys": ["ctrl", "a"]}。許可するのは Enter/Tab/Shift+Tab/Escape/Backspace/Delete/Space/矢印/全選択のみ',
   'wait: {"action": "wait", "seconds": 数}。画面の読み込みを待つ',
   'request_secrets: {"action": "request_secrets", "message": "利用者への依頼文", "fields": [{"name": "保存名", "label": "表示名", "one_time": false}]}。ログイン情報が必要で、まだ保存されていない時に使う。2FAやメールの一時コードには one_time:true を付け、保存しない',
+  'choose_auth_method: {"action": "choose_auth_method", "message": "利用者への案内", "options": [{"id": "totp", "label": "認証アプリ"}, {"id": "email", "label": "メール"}]}。画面で複数の2FA方法を選べる時は、実際に表示されている候補を2〜10個示して本人に選んでもらう。返ってきた方法を画面で選択してから、必要な入力を request_secrets で求める。',
+  'share_auth_qr: {"action": "share_auth_qr", "message": "QRの用途と次の操作"}。ログイン用または認証アプリ設定用のQRを本人が読む必要がある時、現在の画面画像を本人のDiscord DMへ送る。QRが表示されていない画面では使わない。同じスマホ上で読み取れない場合は別端末やサイトが提供する代替方法を案内する。',
   'ログイン画面では、保存済みのID・パスワードがなければ request_secrets を選ぶ。Discordモーダルに本人が入力した後、type_secret で各欄へ入力してログインを続ける。ユーザーにブラウザの手動操作を頼んで終了しない。ワンタイムコードが必要ならそれも request_secrets で本人に聞く。',
   'done: {"action": "done", "summary": "結果の要約"}。作業が終わった時',
   'fail: {"action": "fail", "reason": "理由"}。続けられない時',

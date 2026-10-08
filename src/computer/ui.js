@@ -1,4 +1,4 @@
-import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 
 // The request is posted in the channel. Only the requesting user can open the modal.
 export function secretRequestPayload(reqId, message, fields, origin = '') {
@@ -37,4 +37,20 @@ export function viewerPayload(png) {
     .setImage('attachment://harklet-browser.png')
     .setColor(0x5865f2);
   return { embeds: [embed], files: [new AttachmentBuilder(png, { name: 'harklet-browser.png' })] };
+}
+
+export function authMethodPayload(reqId, message, options) {
+  const embed = new EmbedBuilder().setTitle('🔐 認証方法を選択')
+    .setDescription(message).setColor(0xfaa61a);
+  const menu = new StringSelectMenuBuilder().setCustomId('cu_auth:' + reqId)
+    .setPlaceholder('使用する認証方法').addOptions(options.map(o => ({ label: o.label, value: o.id })));
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)] };
+}
+
+export function authQrPayload(reqId, png, message) {
+  const embed = new EmbedBuilder().setTitle('🔐 認証用の画面')
+    .setDescription(message).setImage('attachment://harklet-auth.png').setColor(0xfaa61a);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('cu_qr:' + reqId).setLabel('確認して続ける').setStyle(ButtonStyle.Primary));
+  return { embeds: [embed], components: [row], files: [new AttachmentBuilder(png, { name: 'harklet-auth.png' })] };
 }
