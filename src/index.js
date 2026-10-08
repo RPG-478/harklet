@@ -103,59 +103,124 @@ function actionRows(userId, actions) {
   return rows.slice(0, 2);
 }
 
-async function runAction(interaction, action) {
-  const userId = interaction.user.id;
-  if (action.kind === 'remind') {
-    const due = Date.parse(action.arg ?? '');
-    if (Number.isNaN(due)) {
-      return interaction.reply({ content: '日時を解釈できませんでした。/remind で直接指定してください。', flags: MessageFlags.Ephemeral });
-    }
-    const id = store.addReminder(userId, interaction.channelId, action.label, due);
-    return interaction.reply({ content: `⏰ リマインダー #${id}: 「${action.label}」→ ${fmtTs(due)}`, flags: MessageFlags.Ephemeral });
-  }
-  if (action.kind === 'memory') {
-    store.addMemory(userId, String(action.arg ?? action.label));
-    return interaction.reply({ content: `🧠 記憶しました: ${action.arg ?? action.label}`, flags: MessageFlags.Ephemeral });
-  }
-  if (action.kind === 'home_card') {
-    let c = {};
-    try { c = JSON.parse(action.arg ?? '{}'); } catch {}
-    if (!c.title || !c.prompt) {
-      return interaction.reply({ content: 'カード定義が壊れています', flags: MessageFlags.Ephemeral });
-    }
-    store.addHomeCard(userId, String(c.title).slice(0, 60), String(c.prompt).slice(0, 500), c.emoji ?? null, c.color ?? null);
-    await interaction.reply({ content: `🏠 Homeにカード「${c.title}」を追加しました`, flags: MessageFlags.Ephemeral });
+// Agentが実行できる操作。ボタン(act:)と auto 即時実行の両方から呼ぶ。
+async function execAction({ userId, channel, action }) {
+  const a = action ?? {};
+  const arg = a.arg;
+  const norm = (s) => String(s ?? "").toLowerCase().replace(/\s+/g, "");
+  const homeRefresh = async () => {
     const st = store.getSettings(userId);
-    if (st?.home_message_id) {
-      try {
-        const ch = await client.channels.fetch(st.home_channel_id);
-        const m = await ch.messages.fetch(st.home_message_id);
-        await m.edit(await homePayload(userId, actionRows));
-      } catch {}
-    } else {
-      await interaction.followUp({ content: 'Homeが未設置です。`/home open` で設置できます', flags: MessageFlags.Ephemeral });
-    }
-    return;
+    if (!st?.home_message_id) return;
+    try {
+      const ch = await client.channels.fetch(st.home_channel_id);
+      const m = await ch.messages.fetch(st.home_message_id);
+      await m.edit(await homePayload(userId, actionRows));
+    } catch {}
+  };
+
+  if (a.kind === "remind") {
+    const due = Date.parse(arg ?? "");
+    if (Number.isNaN(due)) return "日時を解釈できませんでした。/remind で直接指定してください。";
+    const id = store.addReminder(userId, channel?.id ?? null, a.label, due);
+    return `⏰ リマインダー #${id}: 「${a.label}」→ ${fmtTs(due)}`;
   }
-  return interaction.reply({ content: '未対応のアクションです。', flags: MessageFlags.Ephemeral });
+  if (a.kind === "remind_del") {
+    const rs = store.listReminders(userId);
+    const hit = rs.find(r => String(r.id) === String(arg ?? "").trim()) ?? rs.find(r => norm(r.text).includes(norm(arg)));
+    if (!hit) return `リマインダー「${arg}」は見つかりませんでした`;
+    store.cancelReminder(userId, hit.id);
+    return `🗑️ リマインダー「${hit.text}」を取り消しました`;
+  }
+  if (a.kind === "memory") {
+    store.addMemory(userId, String(arg ?? a.label));
+    return `🧠 記憶しました: ${arg ?? a.label}`;
+  }
+  if (a.kind === "memory_del") {
+    const ms = store.listMemories(userId);
+    const hit = ms.find(m => String(m.id) === String(arg ?? "").trim()) ?? ms.find(m => norm(m.content).includes(norm(arg)));
+    if (!hit) return `記憶「${arg}」は見つかりませんでした`;
+    store.deleteMemory(userId, hit.id);
+    return `🗑️ 記憶を削除しました: ${String(hit.content).slice(0, 60)}`;
+  }
+  if (a.kind === "home_card") {
+    let c = {};
+    try { c = JSON.parse(arg ?? "{}"); } catch {}
+    if (!c.title || !c.prompt) return "カード定義が壊れています";
+    store.addHomeCard(userId, String(c.title).slice(0, 60), String(c.prompt).slice(0, 500), c.emoji ?? null, c.color ?? null);
+    await homeRefresh();
+    return `🏠 Homeにカード「${c.title}」を追加しました`;
+  }
+  if (a.kind === "home_card_del") {
+    const cards = store.listHomeCards(userId);
+    const hit = cards.find(c => norm(c.title).includes(norm(arg)));
+    if (!hit) return `カード「${arg}」は見つかりませんでした`;
+    store.delHomeCard(userId, hit.id);
+    await homeRefresh();
+    return `🗑️ Homeからカード「${hit.title}」を削除しました`;
+  }
+  if (a.kind === "project") {
+    const topic = String(arg ?? a.label).slice(0, 90);
+    if (!channel?.threads || channel.type !== ChannelType.GuildText) {
+      return "スレッドを作れません。サーバーのテキストチャンネルで実行してください";
+    }
+    const thread = await channel.threads.create({ name: `pj-${topic}`, autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek });
+    store.addPanel(thread.id, userId, topic);
+    await thread.send(`📁 プロジェクト「${topic}」。<@${userId}> との会話をここに記録します。はじめの一言をどうぞ。`);
+    return `📁 プロジェクトを作成しました: ${thread}`;
+  }
+  if (a.kind === "location") {
+    const g = await geocodeCity(String(arg ?? ""));
+    if (!g) return `📍 「${arg}」が見つかりませんでした`;
+    const city = `${g.name}, ${g.country_code ?? ""}`;
+    store.setHomeCity(userId, city, g.latitude, g.longitude);
+    await homeRefresh();
+    return `📍 地域を「${city}」に設定しました`;
+  }
+  if (a.kind === "brief") {
+    let b = {};
+    try { b = JSON.parse(arg ?? "{}"); } catch {}
+    if (b.off) { store.upsertSettings(userId, 0, "08:00", null); return "☀️ モーニングブリーフを停止しました"; }
+    const time = String(b.time ?? "").trim();
+    if (!/^\d{1,2}:\d{2}$/.test(time)) return "時刻は HH:MM 形式で指定してください";
+    store.upsertSettings(userId, 1, time, channel?.id ?? null);
+    return `☀️ モーニングブリーフを毎日 ${time} にこのチャンネルへ送ります`;
+  }
+  if (a.kind === "model") {
+    let m = {};
+    try { m = JSON.parse(arg ?? "{}"); } catch { m = { model: arg }; }
+    if (m.model) store.setModel(userId, String(m.model).slice(0, 100));
+    if (m.effort) store.setEffort(userId, m.effort === "default" ? null : String(m.effort));
+    if (m.model || m.effort) await invalidateUserAgents(userId);
+    const s = store.getSettings(userId) ?? {};
+    return `⚙️ モデル設定を更新しました: ${s.model ?? config.llm.model} / effort=${s.effort ?? "default"}`;
+  }
+  return "未対応のアクションです。";
+}
+
+async function runAction(interaction, action) {
+  const result = await execAction({ userId: interaction.user.id, channel: interaction.channel, action });
+  return interaction.reply({ content: result ?? "完了", flags: MessageFlags.Ephemeral });
 }
 
 async function answer(interaction) {
-  const question = interaction.options.getString('question', true);
-  const ephemeral = interaction.options.getBoolean('private') ?? false;
-  await interaction.reply({
-    content: 'Harkletが返信中……',
-    ...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}),
-  });
+  const question = interaction.options.getString("question", true);
+  const ephemeral = interaction.options.getBoolean("private") ?? false;
+  await interaction.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {});
   try {
-    const scope = 'u:' + interaction.user.id;
+    const scope = "u:" + interaction.user.id;
     const result = await chatDsh(interaction.user.id, scope, question);
+    const all = Array.isArray(result.actions) ? result.actions : [];
+    const autos = all.filter(a => a?.auto === true);
     await interaction.editReply({
-      content: result.reply,
-      components: actionRows(interaction.user.id, result.actions),
+      content: result.reply.slice(0, 1900),
+      components: actionRows(interaction.user.id, all.filter(a => a?.auto !== true)),
     });
+    for (const a of autos) {
+      const r = await execAction({ userId: interaction.user.id, channel: interaction.channel, action: a }).catch(e => "⚠️ " + e.message);
+      if (r) await interaction.followUp(r).catch(() => {});
+    }
   } catch (e) {
-    await interaction.editReply('⚠️ エラー: ' + e.message);
+    await interaction.editReply("⚠️ エラー: " + e.message);
   }
 }
 
@@ -416,7 +481,9 @@ async function sendAgentReply(message, scope, text = message.content) {
   message.channel.sendTyping().catch(() => {});
   try {
     const result = await chatDsh(message.author.id, scope, text);
-    const rows = actionRows(message.author.id, result.actions);
+    const all = Array.isArray(result.actions) ? result.actions : [];
+    const autos = all.filter(a => a?.auto === true);
+    const rows = actionRows(message.author.id, all.filter(a => a?.auto !== true));
     await message.reply({
       content: result.reply.slice(0, 1900),
       components: result.reply.length <= 1900 ? rows : [],
@@ -424,6 +491,10 @@ async function sendAgentReply(message, scope, text = message.content) {
     for (let i = 1900; i < result.reply.length; i += 1900) {
       const last = i + 1900 >= result.reply.length;
       await message.reply({ content: result.reply.slice(i, i + 1900), components: last ? rows : [] });
+    }
+    for (const a of autos) {
+      const r = await execAction({ userId: message.author.id, channel: message.channel, action: a }).catch(e => "⚠️ " + e.message);
+      if (r) await message.reply(r).catch(() => {});
     }
   } catch (e) {
     await message.reply('⚠️ エラー: ' + e.message).catch(() => {});
