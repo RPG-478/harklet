@@ -2,67 +2,71 @@
 
 # harklet
 
-Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。
+**Languages:** English | [日本語](./README.ja.md) | [中文](./README.zh.md)
 
-Hark Pro(hark.com)の中核体験 — **記憶を持つアシスタント、会話からの次の一手の提案、ワンタップ実行、プロアクティブな支援** — を Discord のコマンド・ボタン・スレッドに落とし込んでいます。
+A personal AI assistant Discord bot inspired by [Hark Pro](https://www.hark.com).
 
-## 機能
+It brings Hark Pro's core experience — **an assistant with persistent memory, proactive suggestions, one-tap actions, and scoped project conversations** — into Discord slash commands, buttons, and threads.
 
-| Hark Pro | harklet での実装 |
+## Features
+
+| Hark Pro | In harklet |
 | --- | --- |
-| 記憶を持つチャット | `/ask` + ユーザーごとの長期記憶(SQLite)。会話から重要な事実を自動抽出して保存 |
-| Action Buttons | AI の応答に「リマインダー設定」「記憶に保存」などの実行ボタンが付く |
-| プロアクティブ支援 | リマインダー配信 + 毎朝のモーニングブリーフ(`/brief`) |
-| Projects | `/panel` — トピックごとの会話スレッド。パネル内はコマンド不要で自由会話 |
+| Chat with memory | `/ask` + per-user long-term memory (SQLite). Key facts are auto-extracted from conversation |
+| Action Buttons | AI replies come with executable buttons such as "set reminder" and "save to memory" |
+| Proactive assistance | Scheduled reminder delivery + daily morning briefing (`/brief`) |
+| Projects | `/panel` — a topic-scoped thread where you can chat freely without commands |
 
-## セットアップ
+## Setup
 
-1. [Discord Developer Portal](https://discord.com/developers/applications) で Application を作成し、Bot トークンを取得。
-   - Bot 設定で **Message Content Intent** を ON(パネル内の自由会話に必要)。
-2. OAuth2 → URL Generator で `bot` + `applications.commands` を選択し、Bot Permissions は `Send Messages` `Create Public Threads` `Read Message History` を付けて招待。
-3. リポジトリをセットアップ:
+1. Create an application at the [Discord Developer Portal](https://discord.com/developers/applications) and get a bot token.
+   - Enable **Message Content Intent** under Bot → Privileged Gateway Intents (required for free chat inside panels).
+2. Invite the bot via OAuth2 → URL Generator with scopes `bot` + `applications.commands` and permissions `Send Messages` `Create Public Threads` `Read Message History`.
+3. Install and configure:
 
 ```bash
 npm install
 cp .env.example .env   # Windows: copy .env.example .env
-# .env を編集: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
+# edit .env: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
 ```
 
-4. コマンド登録と起動:
+4. Register commands and start:
 
 ```bash
-npm run register   # コマンドをDiscordに登録(開発中は .env に DISCORD_GUILD_ID を入れると即時反映)
-npm run doctor     # トークン・LLM・DBの疎通確認
+npm run register   # set DISCORD_GUILD_ID in .env for instant guild-scoped registration during dev
+npm run doctor     # verify token, LLM endpoint, and DB
 npm start
 ```
 
-## コマンド
+If the Message Content intent is not granted, the bot automatically retries without it (panel free-chat is disabled) and logs a notice.
 
-| コマンド | 説明 |
+## Commands
+
+| Command | Description |
 | --- | --- |
-| `/ask <question>` | アシスタントに質問。記憶を踏まえて回答し、実行ボタンを提案 |
-| `/remember <text>` | 長期記憶に保存 |
-| `/memory list|forget|clear` | 記憶の一覧・削除 |
-| `/remind add|list|cancel` | リマインダー。`10分後` `明日9時` `18:30` `2026-10-09 09:00` などを解釈 |
-| `/panel <topic>` | 会話パネル(スレッド)を作成。パネル内は普通に書き込むだけで会話が続く |
-| `/brief on|off|now` | 毎朝のブリーフィング設定・手動生成 |
-| `/ping` | 生存確認 |
+| `/ask <question>` | Ask the assistant. Replies use your memory and may include action buttons |
+| `/remember <text>` | Save a fact to long-term memory |
+| `/memory list|forget|clear` | List / delete memories |
+| `/remind add|list|cancel` | Reminders. Parses `in 10 min`, `tomorrow 9am`, `18:30`, `2026-10-09 09:00`, Japanese (`10分後` `明日9時`), etc. |
+| `/panel <topic>` | Create a conversation panel (thread). Just type inside to keep chatting |
+| `/brief on|off|now` | Configure / trigger the daily briefing |
+| `/ping` | Health check |
 
-## LLM バックエンド
+## LLM backend
 
-OpenAI 互換 API なら何でも使えます。`OPENAI_BASE_URL` と `OPENAI_MODEL` を変えれば OpenRouter、LM Studio、Ollama などにも接続可能。
+Any OpenAI-compatible chat completions API works. Point `OPENAI_BASE_URL` and `OPENAI_MODEL` at OpenAI, OpenRouter, LM Studio, Ollama, etc. Without a key, non-AI features still work and `/ask` replies with a setup hint.
 
-## 仕組み
+## How it works
 
-- `src/index.js` — Discord イベント・コマンド・ボタン・スケジューラ
-- `src/llm.js` — OpenAI 互換チャット API。JSON 出力 {reply, actions, remember} をパース
-- `src/db.js` — `node:sqlite` による永続化(記憶・会話履歴・リマインダー・設定)
-- `src/schedule.js` — 自然言語ふう時刻パーサ
+- `src/index.js` — Discord events, commands, buttons, schedulers
+- `src/llm.js` — OpenAI-compatible client; parses structured JSON {reply, actions, remember}
+- `src/db.js` — persistence via `node:sqlite` (memories, history, reminders, settings)
+- `src/schedule.js` — natural-language-ish time parser
 
-## 注意
+## Notes
 
-- Message Content Intent を使うため、Bot が **1万ユニークユーザー** を超える場合は Discord の審査が必要です(2026/6 改訂)。それ未満なら Portal のトグルで動きます。
-- AI の自動記憶抽出は誤爆しえます。`/memory list` / `forget` で管理してください。
+- The Message Content Intent requires Discord verification once the bot exceeds **10,000 unique users** (June 2026 revision). Below that, the Developer Portal toggle is enough.
+- Auto-extracted memories can misfire. Manage them with `/memory list` and `/memory forget`.
 
 ## License
 
