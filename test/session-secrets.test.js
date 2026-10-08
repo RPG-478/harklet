@@ -34,4 +34,8 @@ test('verification code fields are marked as one-time even if the model omits th
   assert.equal(parsed.ok, true);
   assert.equal(parsed.action.fields[0].one_time, true);
   assert.equal(parsed.action.fields[1].one_time, false);
+  const english = parseAction({ action: 'request_secrets', fields: [
+    { name: 'verification', label: 'Authenticator number' },
+  ] }, { width: 800, height: 600 });
+  assert.equal(english.action.fields[0].one_time, true);
 });

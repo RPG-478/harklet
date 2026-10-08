@@ -7,7 +7,7 @@ export function isSecretName(name) {
 
 export function isOneTimeSecretField(field) {
   return field?.one_time === true ||
-    /(?:otp|totp|2fa|mfa|code|ワンタイム|認証コード|確認コード)/i.test((field?.name ?? '') + ' ' + (field?.label ?? ''));
+    /(?:otp|totp|2fa|mfa|code|verification|authenticator|ワンタイム|認証|確認番号|確認コード)/i.test((field?.name ?? '') + ' ' + (field?.label ?? ''));
 }
 
 // Replace each known secret value in text with its name. Longer values go first
