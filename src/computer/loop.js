@@ -3,6 +3,8 @@ import { redact } from './names.js';
 
 // Stop only after this many turns in a row without a model reply or a screen.
 const MAX_CONSECUTIVE_FAILURES = 3;
+// Actions that need a screenshot to aim at. Without an image they are refused.
+const COORDINATE_ACTIONS = new Set(['click', 'double_click', 'right_click', 'move', 'scroll']);
 
 function toBridge(a) {
   switch (a.action) {
@@ -54,8 +56,8 @@ function describe(a) {
 
 // Runs observe -> decide -> act until the model says done/fail, or a limit is hit.
 // Problems on the model or screen side are written into the history, so the next
-// turn can see them. A rejected image is dropped from later turns. The run stops only
-// after several turns in a row fail.
+// turn can see them. A rejected image switches the run to element-only control.
+// The run stops only after several turns in a row fail.
 // Secret values only ever go from the vault to sidecar.act (type_secret). They are
 // never passed to decide(), never put in history and never returned in the result.
 export async function runComputerTask(opts) {
@@ -83,10 +85,15 @@ export async function runComputerTask(opts) {
       shot = await sidecar.screenshot(sessionId);
       size = { width: shot.width, height: shot.height };
     } catch (err) {
-      note(step + '. 画面を取得できませんでした（' + err.message + '）。前回の画面サイズで判断します');
+      note(step + '. 画面を取得できませんでした（' + err.message + '）。今回は要素一覧で操作します');
     }
 
     const elementList = await readElements(sidecar, sessionId);
+    const imageSent = useImage && shot !== null;
+    if (!imageSent && !elementList) {
+      return { status: 'failed', reason: '画像も要素一覧もないので操作できませんでした', steps: step };
+    }
+
     const secretNames = vault.listSecretNames(userId);
     const known = new Map();
     for (const name of secretNames) {
@@ -99,7 +106,7 @@ export async function runComputerTask(opts) {
       raw = await decide({
         task,
         history: history.slice(-12).map(h => redact(h, known)),
-        pngBase64: useImage && shot ? shot.png_base64 : null,
+        pngBase64: imageSent ? shot.png_base64 : null,
         width: size.width,
         height: size.height,
         secretNames,
@@ -109,7 +116,7 @@ export async function runComputerTask(opts) {
       failures++;
       if (useImage && err.status === 400) {
         useImage = false;
-        note(step + '. 画像付きの送信が拒否されました（' + err.message + '）。以後は画像なしで続けます');
+        note(step + '. 画像付きの送信が拒否されました（' + err.message + '）。以後は要素一覧だけで操作します');
       } else {
         note(step + '. モデルへの送信が失敗しました（' + err.message + '）');
       }
@@ -134,6 +141,11 @@ export async function runComputerTask(opts) {
       continue;
     }
     const a = parsed.action;
+
+    if (!imageSent && COORDINATE_ACTIONS.has(a.action)) {
+      note(step + '. 画像がないので座標操作は使えません。要素番号（click_element）で操作してください');
+      continue;
+    }
 
     if (a.action === 'done') return { status: 'done', summary: a.summary, steps: step };
     if (a.action === 'fail') return { status: 'failed', reason: a.reason, steps: step };

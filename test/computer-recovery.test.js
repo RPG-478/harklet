@@ -10,6 +10,7 @@ const NO_VAULT = { listSecretNames: () => [], getSecret: () => null };
 const okSidecar = (extra = {}) => ({
   screenshot: async () => ({ png_base64: "AAAA", width: 800, height: 600 }),
   act: async () => {},
+  elements: async () => ({ elements: [] }),
   ...extra,
 });
 const runOpts = (overrides) => ({
@@ -73,7 +74,7 @@ test('a rejected image is dropped and the next turn is sent as text only', async
   assert.equal(result.status, "done");
   assert.equal(seen[0].pngBase64, "AAAA");
   assert.equal(seen[1].pngBase64, null);
-  assert.ok(seen[1].history.some(h => h.includes("画像なしで続けます")));
+  assert.ok(seen[1].history.some(h => h.includes("要素一覧だけで操作します")));
 });
 
 test('repeated model failures inject notes and stop after three turns in a row', async () => {

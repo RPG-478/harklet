@@ -20,10 +20,11 @@ export const SYSTEM_PROMPT = [
   '同じ操作を繰り返す時は、画面が変わったかを必ず確認してください。',
 ].join('\n');
 
-export function buildUserText({ task, history, width, height, secretNames, elements }) {
+export function buildUserText({ task, history, width, height, secretNames, elements, pngBase64 }) {
   const lines = [
     '作業: ' + task,
     '画面サイズ: ' + width + 'x' + height + ' ピクセル',
+    pngBase64 ? '画面画像: あり（座標でも要素番号でも操作できます）' : '画面画像: なし。要素一覧の番号（click_element）で操作してください',
     '保存済みのログイン情報の名前: ' + (secretNames.length ? secretNames.join(', ') : 'なし') + '（値は見えません）',
     elements
       ? '操作できる要素（番号: 役割 ラベル 座標）: ' + elements.slice(0, 60).map(e => e.index + ': ' + e.role + ' ' + e.label + (e.x !== undefined ? ' (' + e.x + ',' + e.y + ')' : '')).join('; ')
