@@ -1,0 +1,20 @@
+{
+  "name": "harklet",
+  "version": "0.1.0",
+  "description": "Hark Pro-inspired personal AI assistant bot for Discord: persistent memory, action buttons, reminders and daily briefings.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "register": "node src/register.js",
+    "doctor": "node src/doctor.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.27.0"
+  }
+}
+
