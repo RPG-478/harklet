@@ -43,6 +43,14 @@ export async function handleComputerInteraction(interaction) {
     await guard(interaction, () => handleSecretModal(interaction));
     return true;
   }
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('cu_auth:')) {
+    await guard(interaction, () => handleAuthSelection(interaction));
+    return true;
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('cu_qr:')) {
+    await guard(interaction, () => handleQrContinue(interaction));
+    return true;
+  }
   return false;
 }
 
@@ -77,14 +85,6 @@ export async function startComputerTask({ userId, task, channel, post: customPos
   } catch (err) {
     running.delete(userId);
     throw err;
-  }
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('cu_auth:')) {
-    await guard(interaction, () => handleAuthSelection(interaction));
-    return true;
-  }
-  if (interaction.isButton() && interaction.customId.startsWith('cu_qr:')) {
-    await guard(interaction, () => handleQrContinue(interaction));
-    return true;
   }
   const post = customPost ?? (text => channel?.send(text).catch(() => {}));
   await post('🖥️ <@' + userId + '> の作業を開始します: ' + task.slice(0, 200));
