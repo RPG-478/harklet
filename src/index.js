@@ -429,10 +429,11 @@ const handlers = {
       return i.reply({ content: 'セットアップには「サーバー管理」権限が必要です。', flags: MessageFlags.Ephemeral });
     }
     await i.deferReply();
-    if (!i.guild?.members?.me?.permissions?.has(PermissionFlagsBits.ManageChannels)) {
-      return i.editReply('❌ Botに「チャンネル管理」権限が必要です。招待URLの permissions は 3197968 が必要です(README参照)。');
-    }
     try {
+      const botMember = i.guild.members.me ?? await i.guild.members.fetchMe();
+      if (!botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+        return i.editReply('❌ Botに「チャンネル管理」権限が必要です。招待URLの permissions は 3197968 が必要です(README参照)。');
+      }
       const categoryId = store.getManagedCategory(i.guildId);
       let cat = categoryId ? await i.guild.channels.fetch(categoryId).catch(() => null) : null;
       if (!cat || cat.type !== ChannelType.GuildCategory) {
