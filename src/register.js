@@ -2,15 +2,13 @@ import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { config } from './config.js';
 
 const commands = [
-  new SlashCommandBuilder().setName('ask')
-    .setDescription('Harkletに質問・相談する')
-    .addStringOption(o => o.setName('question').setDescription('質問や相談').setRequired(true))
-    .addBooleanOption(o => o.setName('private').setDescription('自分だけに表示')),
+  new SlashCommandBuilder().setName('start')
+    .setDescription('Harkletのchat/home/projectsを設置する'),
   new SlashCommandBuilder().setName('model')
     .setDescription('LLMモデル・Reasoning effortの切替（Embed+プルダウン）'),
   new SlashCommandBuilder().setName('main')
-    .setDescription('メインチャンネル設定: 書き込むだけで会話できる')
-    .addSubcommand(s => s.setName('set').setDescription('このチャンネル/指定chをメインに')
+    .setDescription('会話するメインチャンネルを設定する')
+    .addSubcommand(s => s.setName('set').setDescription('このチャンネル/指定チャンネルをメインに')
       .addChannelOption(o => o.setName('channel').setDescription('メインにするチャンネル')
         .addChannelTypes(0))) // GuildText
     .addSubcommand(s => s.setName('off').setDescription('解除'))

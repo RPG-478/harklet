@@ -12,7 +12,7 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 
 | Hark Pro | In harklet |
 | --- | --- |
-| Chat with memory | `/ask` + per-user long-term memory (SQLite). Key facts are auto-extracted from conversation |
+| Chat with memory | Chat channel, DM, or mention + per-user long-term memory (SQLite). Key facts are auto-extracted from conversation |
 | Action Buttons | Replies carry executable buttons, and direct requests are done on the spot: add/delete Home cards, reminders, memories, projects, region, briefing, model |
 | Proactive assistance | Daily briefing plus a DM suggestion when a repeatable Specialty is due; browser work starts only after you ask or press its action button |
 | Specialties | Teach a repeatable workflow in chat, or let the computer agent remember a useful workflow when it finishes. Ask for it again by name; optional repeat interval |
@@ -35,7 +35,7 @@ For testing, set `DISCORD_GUILD_ID` and `HARKLET_ENABLE_RESET=1` when registerin
 2. Invite the bot via OAuth2 → URL Generator with scopes `bot` + `applications.commands` and permissions `Send Messages` `Create Public Threads` `Read Message History`.
 
    Required bot permissions (bitfield `3197968`):
-   - View Channels, Send Messages, Send Messages in Threads, Create Public Threads, Read Message History, **Manage Channels** (for `/main set` auto-setup)
+   - View Channels, Send Messages, Send Messages in Threads, Create Public Threads, Read Message History, **Manage Channels** (for `/start` auto-setup)
 
    Invite URL template: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197968&scope=bot%20applications.commands`
 3. Install and configure:
@@ -60,13 +60,13 @@ If the Message Content intent is not granted, the bot automatically retries with
 
 ## Commands
 
-For everyday use, write in the chat channel created by `/main set`, DM Harklet, or mention it. Ask for Web work, reminders, memories, projects, and briefings in ordinary language. `/ask` is a shortcut when you want a private reply.
+For everyday use, write in the chat channel created by `/start`, DM Harklet, or mention it. Ask for Web work, reminders, memories, projects, and briefings in ordinary language. Use a DM for private requests.
 
 | Command | Description |
 | --- | --- |
-| `/ask <question>` | Ask the assistant. Replies use your memory and may include action buttons |
-| `/model` | Embed + dropdowns to pick model & effort per user (list auto-fetched from provider; staged until you press 決定/Apply) |
-| `/main set|off|show` | Set the main channel (plain messages = chat). `set` also creates a **Harklet** category with chat/home/projects channels (needs Manage Channels; Manage Server required) |
+| `/start` | Set up the Harklet category and chat/home/projects channels; reuses existing channels on later runs (Manage Server and Manage Channels required) |
+| `/model` | Search and page through models available to the configured API key, then apply model and effort per user |
+| `/main set|off|show` | Set an existing channel as the main chat, disable it, or show it. `set` does not create channels |
 | `/memory list|forget|clear` | List / delete memories |
 | `/home open|cards|off` | Place/manage custom cards/remove the Home dashboard (auto-refresh every 30 min). AI can offer an Add to Home button that creates dynamic cards |
 | `/stop` | Stop browser work and save the VM |
@@ -98,7 +98,7 @@ Three provider styles are supported; the active one is auto-detected from which 
 ## Notes
 
 - The Message Content Intent requires Discord verification once the bot exceeds **10,000 unique users** (June 2026 revision). Below that, the Developer Portal toggle is enough.
-- While the model is thinking, Discord native typing indicator is used (`/ask` uses the standard thinking state).
+- While the model is thinking, Discord's native typing indicator is used.
 - Auto-extracted memories can misfire. Manage them with `/memory list` and `/memory forget`.
 
 ## License

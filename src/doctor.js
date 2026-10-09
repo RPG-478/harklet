@@ -11,7 +11,7 @@ check('DISCORD_TOKEN', !!config.discordToken);
 check('DISCORD_CLIENT_ID', !!config.clientId);
 const llm = config.llm;
 check('LLM provider', !!llm.apiKey, `${llm.provider} / ${llm.model}`);
-if (!llm.apiKey) warn('LLM', '(キー未設定: /ask・パネル会話・ブリーフ生成は応答不可)');
+if (!llm.apiKey) warn('LLM', '(キー未設定: チャット・パネル会話・ブリーフ生成は応答不可)');
 
 // Discord token check
 try {
@@ -22,7 +22,7 @@ try {
   check('Botトークン有効', r.ok, r.ok ? `(@${body.username})` : JSON.stringify(body).slice(0, 200));
 } catch (e) { check('Botトークン有効', false, e.message); }
 
-// LLM check (OpenAI-compatible endpoint; native providers are checked implicitly on first /ask)
+// LLM check (OpenAI-compatible endpoint; native providers are checked on first chat)
 if (llm.apiKey && llm.provider === 'openai') {
   try {
     const r = await fetch(`${llm.baseUrl}/chat/completions`, {
