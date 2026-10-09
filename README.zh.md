@@ -21,6 +21,9 @@ Chat browser work uses a dedicated Quicksand Linux VM and does not require Docke
 | Projects | 在聊天中请求创建项目子区，或使用 Projects 按钮 |
 | Agent浏览器 | 在聊天中请求网页操作；Harklet 启动每用户专用 Quicksand Linux VM 并汇报结果。`/stop` 保存并关闭；[设置与限制](docs/browser-agent.md) |
 | 实时画面 | 浏览器任务开始时通过私信发送只读 noVNC 链接。安装 cloudflared 后可通过 HTTPS 在手机或其他网络查看 |
+| 面板 (Panels) | Home 卡片是 Hark 风格面板：Agent 可创建能拉取已连接服务实时数据、自带操作按钮的卡片。回复 Home 消息即可用对话方式重新设计 |
+
+外部服务通过每用户 OAuth 连接 —— 使用 `/service connect` 或在聊天中直接要求。**Google Workspace**（Gmail 未读、今日日历）采用回环 URL + 代码输入；**Microsoft 365**（Outlook 未读、日历）采用设备码流程，可在手机上批准。刷新令牌与浏览器登录信息一样存放在 AES-256-GCM 保险库（`HARKLET_SECRET_KEY`）中。连接后 Agent 可按需读取数据，Home 面板也可显示。GitHub 仍作为 VM 内的网站操作（Home 的 GitHub 概要卡片使用单独的只读令牌）。
 
 ## 安装
 
@@ -39,6 +42,7 @@ npm install
 cp .env.example .env   # Windows: copy .env.example .env
 # 编辑 .env: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
 # 可选: HARKLET_SECRET_KEY（加密 Agent 浏览器保存的登录信息）
+# 可选: GOOGLE_CLIENT_ID/SECRET、M365_CLIENT_ID（服务连接器）
 ```
 
 4. 注册命令并启动：
@@ -63,6 +67,7 @@ npm start
 | `/memory list|forget|clear` | 查看 / 删除记忆 |
 | `/home open|cards|off` | 放置/管理自定义卡片/移除 Home（每 30 分钟自动刷新，附刷新按钮）。AI 可提议“添加到主页”生成动态卡片 |
 | `/stop` | 停止浏览器任务并保存虚拟机 |
+| `/service list|connect|disconnect` | 管理每用户对 Google Workspace / Microsoft 365 的 OAuth 连接（也可在聊天中直接要求） |
 
 ## LLM 后端
 
@@ -85,6 +90,7 @@ npm start
 - `src/db.js` —— 基于 `node:sqlite` 的持久化（记忆、历史、提醒、设置）
 - `src/schedule.js` —— 自然语言时间解析器
 - `src/computer/*` —— Agent浏览器栈：Quicksand VM 控制、视觉循环、登录模态框、AES-256-GCM 密钥保管库、带认证的 noVNC 查看器（可选 Cloudflare 隧道）；VM 由 `sidecar/quicksand_session.py` 驱动
+- `src/connect/*` —— OAuth 服务连接器：Google Workspace（回环 URL + 模态框）与 Microsoft 365（设备码流程），刷新令牌存入加密保险库，可从聊天或 Home 面板注入数据
 
 ## 注意
 

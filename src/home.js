@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { store } from './db.js';
 import { chatDsh } from './dsh-agent.js';
 import { fmtTs } from './schedule.js';
+import { fetchOps } from './connect/index.js';
 
 const HOME_COLOR = 0x5865f2;
 
@@ -101,14 +102,27 @@ function memoryCard(userId) {
     .setFooter({ text: '/memory list で全件・forget で削除' });
 }
 
-// ユーザーのカスタムカード: 登録プロンプトを毎回LLMに投げて内容を生成
+// ユーザーのカスタムカード(パネル): 接続サービスのデータ(ops)を先に取得し、
+// それを材料に登録プロンプトで内容を生成。ボタン定義があればインタラクション用に返す。
 async function customCard(userId, c) {
-  const r = await chatDsh(userId, `card:${c.id}`, c.prompt).catch(() => null);
+  let ops = [];
+  try { ops = JSON.parse(c.ops ?? '[]'); } catch {}
+  if (!Array.isArray(ops)) ops = [];
+  const dataBlock = ops.length
+    ? await fetchOps(userId, ops.slice(0, 4)).catch(() => '')
+    : '';
+  const prompt = dataBlock
+    ? '【取得済みデータ】\n' + dataBlock + '\n\n【このカードの表示指示】\n' + c.prompt
+    : c.prompt;
+  const r = await chatDsh(userId, `card:${c.id}`, prompt).catch(() => null);
   if (!r) return null;
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setTitle(`${c.emoji ?? `📊`} ${c.title}`.slice(0, 100))
     .setColor(c.color ?? 0x9b59b6)
     .setDescription(r.reply.slice(0, 900));
+  let buttons = [];
+  try { buttons = JSON.parse(c.buttons ?? '[]'); } catch {}
+  return { embed, buttons: Array.isArray(buttons) ? buttons.slice(0, 5) : [] };
 }
 
 // ---------- payload ----------
@@ -116,15 +130,29 @@ async function customCard(userId, c) {
 export async function homePayload(userId, actionRows) {
   const customs = store.listHomeCards(userId).slice(0, 4);
   const [brief, weather, gh, ...customEmbeds] = await Promise.all([briefCard(userId), weatherCard(userId), githubCard(), ...customs.map(c => customCard(userId, c))]);
-  const embeds = [brief.embed, ...customEmbeds, weather, gh, remindersCard(userId), memoryCard(userId)]
+  const embeds = [brief.embed, ...customEmbeds.map(x => x?.embed), weather, gh, remindersCard(userId), memoryCard(userId)]
     .filter(Boolean).slice(0, 10);
   const newProj = new ButtonBuilder().setCustomId('home_newproj').setLabel('プロジェクト作成').setEmoji('📁').setStyle(ButtonStyle.Primary);
   const region = new ButtonBuilder().setCustomId('home_region').setLabel('地域').setEmoji('📍').setStyle(ButtonStyle.Secondary);
   const refresh = new ButtonBuilder().setCustomId('home_refresh').setLabel('更新').setEmoji('🔄').setStyle(ButtonStyle.Secondary);
   const rows = [new ActionRowBuilder().addComponents(newProj, region, refresh)];
   if (brief.actions?.length) rows.push(...actionRows(userId, brief.actions));
+  // カスタムカード(パネル)固有のボタン: 押すとエージェントがその指示を実行
+  customs.forEach((c, ci) => {
+    const btns = customEmbeds[ci]?.buttons ?? [];
+    if (!btns.length || rows.length >= 5) return;
+    const row = new ActionRowBuilder();
+    btns.forEach((b, bi) => {
+      if (!b?.label || !b?.prompt || row.components.length >= 5) return;
+      row.addComponents(new ButtonBuilder()
+        .setCustomId(`hcbtn:${c.id}:${bi}`)
+        .setLabel(String(b.label).slice(0, 40))
+        .setStyle(ButtonStyle.Secondary));
+    });
+    if (row.components.length) rows.push(row);
+  });
   return {
-    content: '🏠 **Harklet Home**',
+    content: '🏠 **Harklet Home**\n*このメッセージに返信するとHome/カードを会話で編集できます*',
     embeds,
     components: rows.slice(0, 5),
   };

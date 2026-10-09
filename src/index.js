@@ -12,6 +12,10 @@ import { listModels } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
 import { handleComputerInteraction, startComputerTask, computerIsBusy } from './computer/controller.js';
 import { detachedProjectThreads } from './reset-plan.js';
+import * as google from './connect/google.js';
+import * as m365 from './connect/m365.js';
+import { PROVIDERS, providerStatus, runOp } from './connect/index.js';
+import { randomBytes } from 'node:crypto';
 
 function makeClient(withContent) {
   const intents = [
@@ -39,6 +43,8 @@ const pendingModelSel = new Map(); // userId -> model
 const pendingEffortSel = new Map(); // userId -> effort|'default'
 const pendingResets = new Map(); // guildId -> { userId, expires }
 const resettingGuilds = new Set();
+// Google OAuth ループバック用 state → 誰の接続フローか (CSRF防止・モーダル検証)
+const connectStates = new Map(); // state -> { userId, provider, expires }
 
 function resetAllowed(i) {
   return process.env.HARKLET_ENABLE_RESET === '1' && config.guildId && i.guildId === config.guildId &&
@@ -202,9 +208,39 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
     let c = {};
     try { c = JSON.parse(arg ?? "{}"); } catch {}
     if (!c.title || !c.prompt) return "カード定義が壊れています";
-    store.addHomeCard(userId, String(c.title).slice(0, 60), String(c.prompt).slice(0, 500), c.emoji ?? null, c.color ?? null);
+    const ops = Array.isArray(c.ops) ? JSON.stringify(c.ops.filter(o => typeof o === 'string').slice(0, 4)) : null;
+    const btns = Array.isArray(c.buttons)
+      ? JSON.stringify(c.buttons.filter(b => b?.label && b?.prompt)
+        .map(b => ({ label: String(b.label).slice(0, 40), prompt: String(b.prompt).slice(0, 300) })).slice(0, 5))
+      : null;
+    store.addHomeCard(userId, String(c.title).slice(0, 60), String(c.prompt).slice(0, 500), c.emoji ?? null, c.color ?? null, ops, btns);
     await homeRefresh();
     return `🏠 Homeにカード「${c.title}」を追加しました`;
+  }
+  if (a.kind === "home_card_upd") {
+    let c = {};
+    try { c = JSON.parse(arg ?? "{}"); } catch {}
+    const cards = store.listHomeCards(userId);
+    const hit = cards.find(x => norm(x.title).includes(norm(c.target ?? c.title ?? "")));
+    if (!hit) return `カード「${c.target ?? c.title}」が見つかりませんでした`;
+    const upd = {
+      title: c.new_title ? String(c.new_title).slice(0, 60) : hit.title,
+      prompt: c.prompt ? String(c.prompt).slice(0, 500) : hit.prompt,
+      emoji: c.emoji !== undefined ? c.emoji : hit.emoji,
+      color: c.color !== undefined ? c.color : hit.color,
+      ops: c.ops !== undefined
+        ? (Array.isArray(c.ops) ? JSON.stringify(c.ops.filter(o => typeof o === 'string').slice(0, 4)) : null)
+        : hit.ops,
+      buttons: c.buttons !== undefined
+        ? (Array.isArray(c.buttons)
+          ? JSON.stringify(c.buttons.filter(b => b?.label && b?.prompt)
+            .map(b => ({ label: String(b.label).slice(0, 40), prompt: String(b.prompt).slice(0, 300) })).slice(0, 5))
+          : null)
+        : hit.buttons,
+    };
+    store.updHomeCard(userId, hit.id, upd);
+    await homeRefresh();
+    return `🏠 カード「${upd.title}」を更新しました`;
   }
   if (a.kind === "home_card_del") {
     const cards = store.listHomeCards(userId);
@@ -250,14 +286,67 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
     const s = store.getSettings(userId) ?? {};
     return `⚙️ モデル設定を更新しました: ${s.model ?? config.llm.model} / effort=${s.effort ?? "default"}`;
   }
+  if (a.kind === "connect") {
+    const key = providerKey(arg ?? a.label);
+    const p = PROVIDERS[key];
+    if (!p) return '未対応のサービスです（対応: ' + Object.keys(PROVIDERS).join('/') + '）';
+    if (!p.configured()) return p.name + ' はこのBotで未設定です（管理者が .env にクライアントIDを入れる必要があります）';
+    if (p.connected(userId)) return p.name + ' はすでに接続済みです';
+    if (key === 'google') {
+      const state = randomBytes(8).toString('hex');
+      connectStates.set(state, { userId, provider: 'google', expires: Date.now() + 10 * 60_000 });
+      const url = google.authUrl(state);
+      return {
+        content: '🔗 **' + p.name + ' を接続**\n1. このリンクを開いて許可\n' + url
+          + '\n2. 「このサイトにアクセスできません」と出たらアドレスバーのURLをコピー\n3. 下のボタンを押してURLを貼る',
+        components: [new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('concode:google').setLabel('コードを入力').setEmoji('🔑').setStyle(ButtonStyle.Primary),
+        )],
+      };
+    }
+    if (key === 'm365') {
+      const flow = await m365.startDeviceFlow();
+      const msg = '🔗 **' + p.name + ' を接続**\n' + (flow.message ?? '')
+        + '\n\n👉 ' + (flow.verification_uri ?? 'https://microsoft.com/devicelogin') + ' でコード \`' + flow.user_code + '\` を入力（スマホからOK）';
+      m365.pollDeviceFlow(userId, flow, channel)
+        .then(res => channel?.send(res ? '✅ ' + p.name + ' を接続しました: ' + (res.email || '') : '⏱️ ' + p.name + ' の接続がタイムアウト/拒否されました').catch(() => {}))
+        .catch(() => {});
+      return msg;
+    }
+    return '未対応の接続方式です';
+  }
+  if (a.kind === "disconnect") {
+    const key = providerKey(arg ?? a.label);
+    const p = PROVIDERS[key];
+    if (!p) return '未対応のサービスです';
+    p.disconnect(userId);
+    return '🔌 ' + p.name + ' を切断しました';
+  }
+  if (a.kind === "service") {
+    return await runOp(userId, String(arg ?? a.label ?? ''));
+  }
   return "未対応のアクションです。";
+}
+
+function providerKey(v) {
+  const s = String(v ?? '').toLowerCase();
+  if (/google|gmail|workspace|カレンダ|グーグル/.test(s)) return 'google';
+  if (/m365|microsoft|outlook|office|マイクロソフト/.test(s)) return 'm365';
+  return s.replace(/[^a-z0-9]/g, '');
+}
+
+// execAction の結果を reply/editReply/followUp/send 可能な形に正規化
+function asReply(result, ephemeral = false) {
+  const base = { ...(typeof result === 'object' && result !== null ? result : { content: result ?? '完了' }) };
+  if (ephemeral) base.flags = MessageFlags.Ephemeral;
+  return base;
 }
 
 async function runAction(interaction, action) {
   if (action?.kind === 'computer') await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const result = await execAction({ userId: interaction.user.id, channel: interaction.channel, action, scope: 'u:' + interaction.user.id });
-  if (interaction.deferred) return interaction.editReply({ content: result ?? '完了' });
-  return interaction.reply({ content: result ?? '完了', flags: MessageFlags.Ephemeral });
+  if (interaction.deferred) return interaction.editReply(asReply(result));
+  return interaction.reply(asReply(result, true));
 }
 
 async function answer(interaction) {
@@ -276,7 +365,7 @@ async function answer(interaction) {
     for (const a of autos) {
       const computerChannel = a.kind === 'computer' && ephemeral ? await interaction.user.createDM().catch(() => null) : null;
       const r = await execAction({ userId: interaction.user.id, channel: interaction.channel, action: a, scope, computerChannel, privateComputer: a.kind === 'computer' && ephemeral }).catch(e => "⚠️ " + e.message);
-      if (r) await interaction.followUp({ content: r, ...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}) }).catch(() => {});
+      if (r) await interaction.followUp(asReply(r, ephemeral)).catch(() => {});
     }
   } catch (e) {
     await interaction.editReply("⚠️ エラー: " + e.message);
@@ -463,6 +552,22 @@ const handlers = {
     return i.editReply('🏠 Homeを設置しました。30分ごとに自動更新・「更新」ボタンで即時更新できます');
   },
 
+  async service(i) {
+    const sub = i.options.getSubcommand();
+    if (sub === 'list') {
+      const lines = providerStatus(i.user.id);
+      const txt = lines.length ? '🔗 接続状況\n' + lines.map(l => '- ' + l).join('\n')
+        : '外部サービスが未設定です（管理者が .env に GOOGLE_CLIENT_ID / M365_CLIENT_ID を入れると使えます）';
+      return i.reply({ content: txt, flags: MessageFlags.Ephemeral });
+    }
+    const provider = i.options.getString('provider', true);
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const kind = sub === 'connect' ? 'connect' : 'disconnect';
+    const r = await execAction({ userId: i.user.id, channel: i.channel, action: { kind, arg: provider }, scope: 'u:' + i.user.id })
+      .catch(e => '⚠️ ' + e.message);
+    await i.editReply(asReply(r));
+  },
+
   async brief(i) {
     const sub = i.options.getSubcommand();
     if (sub === 'on') {
@@ -570,7 +675,7 @@ async function sendAgentReply(message, scope, text = message.content) {
     }
     for (const a of autos) {
       const r = await execAction({ userId: message.author.id, channel: message.channel, action: a, scope }).catch(e => "⚠️ " + e.message);
-      if (r) await message.reply(r).catch(() => {});
+      if (r) await message.reply(asReply(r)).catch(() => {});
     }
   } catch (e) {
     await message.reply('⚠️ エラー: ' + e.message).catch(() => {});
@@ -657,7 +762,44 @@ client.on('interactionCreate', async (interaction) => {
           .setStyle(TextInputStyle.Short).setRequired(true),
       ));
       await interaction.showModal(modal);
-    } else if (interaction.isButton() && interaction.customId === 'home_region') {
+    } else if (interaction.isButton() && interaction.customId === 'concode:google') {
+      const modal = new ModalBuilder().setCustomId('conmodal:google').setTitle('Google接続コード');
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('auth_input')
+          .setLabel('リダイレクト先URL(アドレスバーからコピー)')
+          .setStyle(TextInputStyle.Short).setRequired(true)
+          .setPlaceholder('http://127.0.0.1/?code=...&state=...'),
+      ));
+      await interaction.showModal(modal);
+    } else if (interaction.isButton() && interaction.customId.startsWith('hcbtn:')) {
+      const [, cardId, idx] = interaction.customId.split(':');
+      const card = store.getHomeCard(Number(cardId));
+      if (!card || card.user_id !== interaction.user.id) {
+        return interaction.reply({ content: 'このカードは見つかりません', flags: MessageFlags.Ephemeral });
+      }
+      let btns = [];
+      try { btns = JSON.parse(card.buttons ?? '[]'); } catch {}
+      const btn = btns[Number(idx)];
+      if (!btn?.prompt) {
+        return interaction.reply({ content: 'このボタンはもう使えません', flags: MessageFlags.Ephemeral });
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const result = await chatDsh(interaction.user.id, 'cardbtn:' + cardId, btn.prompt);
+        const all = Array.isArray(result.actions) ? result.actions : [];
+        const autos = all.filter(a => a?.auto === true);
+        await interaction.editReply({
+          content: result.reply.slice(0, 1900),
+          components: actionRows(interaction.user.id, all.filter(a => a?.auto !== true)),
+        });
+        for (const a of autos) {
+          const r = await execAction({ userId: interaction.user.id, channel: interaction.channel, action: a, scope: 'cardbtn:' + cardId }).catch(e => '⚠️ ' + e.message);
+          if (r) await interaction.followUp(asReply(r, true)).catch(() => {});
+        }
+      } catch (e) {
+        await interaction.editReply('⚠️ エラー: ' + e.message).catch(() => {});
+      }
+   } else if (interaction.isButton() && interaction.customId === 'home_region') {
       const modal = new ModalBuilder().setCustomId('home_region_modal').setTitle('地域を設定');
       modal.addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('region_city')
@@ -673,7 +815,37 @@ client.on('interactionCreate', async (interaction) => {
           .setStyle(TextInputStyle.Short).setRequired(true),
       ));
       await interaction.showModal(modal);
-    } else if (interaction.isModalSubmit() && interaction.customId === 'model_modal') {
+    } else if (interaction.isModalSubmit() && interaction.customId === 'conmodal:google') {
+      const input = interaction.fields.getTextInputValue('auth_input').trim();
+      const { code, state } = google.parseAuthInput(input);
+      let st = connectStates.get(state ?? '');
+      let stKey = state;
+      // URL全体を貼らずコードだけの場合: このユーザーの進行中Google接続stateにフォールバック
+      if (!st && !state) {
+        const found = [...connectStates.entries()].find(([, v]) => v.userId === interaction.user.id && v.provider === 'google' && v.expires > Date.now());
+        if (found) { stKey = found[0]; st = found[1]; }
+      }
+      if (st && (st.userId !== interaction.user.id || st.expires < Date.now())) st = null;
+      if (stKey) connectStates.delete(stKey);
+      if (!st && state) {
+        return interaction.reply({ content: '接続セッションの期限切れか、別ユーザーのURLです。もう一度 connect からやり直してください', flags: MessageFlags.Ephemeral });
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const email = await google.exchangeCode(interaction.user.id, code);
+        await interaction.editReply('✅ Google Workspace を接続しました: ' + (email || ''));
+        const st2 = store.getSettings(interaction.user.id);
+        if (st2?.home_message_id) {
+          try {
+            const ch = await client.channels.fetch(st2.home_channel_id);
+            const m = await ch.messages.fetch(st2.home_message_id);
+            await m.edit(await homePayload(interaction.user.id, actionRows));
+          } catch {}
+        }
+      } catch (e) {
+        await interaction.editReply('⚠️ 接続失敗: ' + e.message).catch(() => {});
+      }
+   } else if (interaction.isModalSubmit() && interaction.customId === 'model_modal') {
       const name = interaction.fields.getTextInputValue('model_name').trim();
       pendingModelSel.set(interaction.user.id, name);
       await interaction.update(await modelPanel(interaction.user.id));
@@ -728,7 +900,19 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
   if (message.guildId && resettingGuilds.has(message.guildId)) return;
   if (!message.content.trim()) return;
-  if (message.author.bot) return;
+ if (message.author.bot) return;
+
+  // Homeメッセージへの返信 = パネル(Home/カード)の会話的編集
+  const refId = message.reference?.messageId;
+  if (refId) {
+    const homeTarget = store.homeTargets().find(t => t.home_message_id === refId);
+    if (homeTarget) {
+      if (message.author.id !== homeTarget.user_id) return;
+      const text = '[この返信はHome画面(パネル)への編集要求です。home_card_upd で既存カード更新、home_card で新規カード追加、home_card_del で削除してください。auto: true で即実行されます]\n' + message.content;
+      await sendAgentReply(message, 'homeedit:' + homeTarget.user_id, text);
+      return;
+    }
+  }
 
   // メインチャンネル: 書き込むだけで会話
   if (message.guildId && message.channel.id === store.getMain(message.guildId)) {

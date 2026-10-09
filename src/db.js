@@ -76,6 +76,9 @@ for (const col of ['model TEXT', 'effort TEXT', 'home_channel_id TEXT', 'home_me
   'home_city TEXT', 'home_lat REAL', 'home_lon REAL']) {
   try { db.exec(`ALTER TABLE settings ADD COLUMN ${col}`); } catch { /* exists */ }
 }
+for (const col of ['ops TEXT', 'buttons TEXT']) {
+  try { db.exec(`ALTER TABLE home_cards ADD COLUMN ${col}`); } catch { /* exists */ }
+}
 
 const q = {
   addMemory: db.prepare('INSERT INTO memories (user_id, content, created_at) VALUES (?, ?, ?)'),
@@ -114,8 +117,10 @@ const q = {
       home_lat=excluded.home_lat, home_lon=excluded.home_lon`),
   clearHome: db.prepare('UPDATE settings SET home_channel_id=NULL, home_message_id=NULL WHERE user_id=?'),
   homeTargets: db.prepare('SELECT user_id, home_channel_id, home_message_id FROM settings WHERE home_channel_id IS NOT NULL'),
-  addHomeCard: db.prepare('INSERT INTO home_cards (user_id, title, prompt, emoji, color, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
-  listHomeCards: db.prepare('SELECT id, title, prompt, emoji, color FROM home_cards WHERE user_id = ? ORDER BY id'),
+  addHomeCard: db.prepare('INSERT INTO home_cards (user_id, title, prompt, emoji, color, ops, buttons, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
+  getHomeCard: db.prepare('SELECT id, user_id, title, prompt, emoji, color, ops, buttons FROM home_cards WHERE id = ?'),
+  updHomeCard: db.prepare('UPDATE home_cards SET title = ?, prompt = ?, emoji = ?, color = ?, ops = ?, buttons = ? WHERE id = ? AND user_id = ?'),
+  listHomeCards: db.prepare('SELECT id, title, prompt, emoji, color, ops, buttons FROM home_cards WHERE user_id = ? ORDER BY id'),
   delHomeCard: db.prepare('DELETE FROM home_cards WHERE id = ? AND user_id = ?'),
   setProjectChannel: db.prepare('INSERT OR REPLACE INTO project_channels (guild_id, channel_id) VALUES (?, ?)'),
   getProjectChannel: db.prepare('SELECT channel_id FROM project_channels WHERE guild_id = ?'),
@@ -162,7 +167,11 @@ export const store = {
   setHomeCity: (userId, city, lat, lon) => q.setHomeCity.run(userId, city, lat, lon),
   clearHome: (userId) => q.clearHome.run(userId),
   homeTargets: () => q.homeTargets.all(),
-  addHomeCard: (userId, title, prompt, emoji, color) => q.addHomeCard.run(userId, title, prompt, emoji, color, Date.now()),
+  addHomeCard: (userId, title, prompt, emoji, color, ops, buttons) =>
+    q.addHomeCard.run(userId, title, prompt, emoji, color, ops ?? null, buttons ?? null, Date.now()),
+  getHomeCard: (id) => q.getHomeCard.get(id),
+  updHomeCard: (userId, id, { title, prompt, emoji, color, ops, buttons }) =>
+    q.updHomeCard.run(title, prompt, emoji, color, ops ?? null, buttons ?? null, id, userId).changes > 0,
   listHomeCards: (userId) => q.listHomeCards.all(userId),
   delHomeCard: (userId, id) => q.delHomeCard.run(id, userId).changes > 0,
   setProjectChannel: (guildId, channelId) => q.setProjectChannel.run(guildId, channelId),

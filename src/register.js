@@ -28,6 +28,17 @@ const commands = [
     .addSubcommand(s => s.setName('off').setDescription('Homeを解除(自動更新停止)')),
   new SlashCommandBuilder().setName('stop')
     .setDescription('Agentのブラウザ作業を止めて画面を保存する'),
+  new SlashCommandBuilder().setName('service')
+    .setDescription('外部サービス接続 (Google Workspace / Microsoft 365)')
+    .addSubcommand(s => s.setName('list').setDescription('接続状況の一覧'))
+    .addSubcommand(s => s.setName('connect').setDescription('サービスを接続')
+      .addStringOption(o => o.setName('provider').setDescription('google または m365').setRequired(true)
+        .addChoices({ name: 'Google Workspace (Gmail/Calendar)', value: 'google' },
+          { name: 'Microsoft 365 (Outlook/Calendar)', value: 'm365' })))
+    .addSubcommand(s => s.setName('disconnect').setDescription('サービスを切断')
+      .addStringOption(o => o.setName('provider').setDescription('google または m365').setRequired(true)
+        .addChoices({ name: 'Google Workspace', value: 'google' },
+          { name: 'Microsoft 365', value: 'm365' }))),
 ];
 
 // This command clears the entire Harklet database, so expose it only in an opted-in test guild.

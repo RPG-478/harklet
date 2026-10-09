@@ -1,0 +1,124 @@
+// Google Workspace connector: OAuth installed-app loopback + Gmail/Calendar read APIs.
+// Flow: agent "connect" action → auth URL → user consents → browser lands on a dead
+// http://127.0.0.1 page → user pastes the URL into a Discord modal → we exchange the code.
+import { vault, vaultReady } from '../computer/vault.js';
+
+const CID = () => process.env.GOOGLE_CLIENT_ID?.trim();
+const CSEC = () => process.env.GOOGLE_CLIENT_SECRET?.trim();
+const TOKEN_ORIGIN = 'https://oauth2.googleapis.com';
+const REFRESH_NAME = 'gws_refresh';
+const PROFILE_NAME = 'gws_profile';
+const SCOPES = [
+  'openid', 'email',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/calendar.readonly',
+].join(' ');
+const REDIRECT = 'http://127.0.0.1';
+
+export function googleConfigured() { return !!(CID() && CSEC()); }
+export function googleConnected(userId) {
+  return vaultReady() && vault.listSecretNames(userId, TOKEN_ORIGIN).includes(REFRESH_NAME);
+}
+export function googleProfile(userId) {
+  try { return JSON.parse(vault.getSecret(userId, PROFILE_NAME, TOKEN_ORIGIN) ?? 'null'); } catch { return null; }
+}
+
+export function authUrl(state) {
+  const p = new URLSearchParams({
+    client_id: CID(), redirect_uri: REDIRECT, response_type: 'code',
+    scope: SCOPES, access_type: 'offline', prompt: 'consent', state,
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
+}
+
+async function tokenRequest(fields) {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(fields),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error('token request failed: ' + (data.error_description || data.error || res.status));
+  return data;
+}
+
+// Accepts a pasted URL ("http://127.0.0.1/?code=..&state=..") or a bare code.
+export function parseAuthInput(text) {
+  const t = String(text ?? '').trim();
+  const m = t.match(/[?&]code=([^&\s]+)/);
+  const state = t.match(/[?&]state=([^&\s]+)/)?.[1];
+  return { code: decodeURIComponent(m ? m[1] : t), state };
+}
+
+export async function exchangeCode(userId, code) {
+  const data = await tokenRequest({
+    code, client_id: CID(), client_secret: CSEC(),
+    redirect_uri: REDIRECT, grant_type: 'authorization_code',
+  });
+  if (!data.refresh_token) throw new Error('refresh_token が返りませんでした。prompt=consent で再認証が必要です');
+  vault.setSecret(userId, REFRESH_NAME, data.refresh_token, TOKEN_ORIGIN);
+  let email = '';
+  try {
+    const me = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { Authorization: 'Bearer ' + data.access_token },
+    }).then(r => r.ok ? r.json() : null);
+    email = me?.email ?? '';
+  } catch {}
+  vault.setSecret(userId, PROFILE_NAME, JSON.stringify({ email }), TOKEN_ORIGIN);
+  return email;
+}
+
+async function accessToken(userId) {
+  const refresh = vault.getSecret(userId, REFRESH_NAME, TOKEN_ORIGIN);
+  if (!refresh) throw new Error('Google未接続');
+  const data = await tokenRequest({
+    refresh_token: refresh, client_id: CID(), client_secret: CSEC(),
+    grant_type: 'refresh_token',
+  });
+  return data.access_token;
+}
+
+async function api(userId, url) {
+  const token = await accessToken(userId);
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error('Google API ' + res.status + ': ' + JSON.stringify(data?.error?.message ?? data).slice(0, 200));
+  return data;
+}
+
+export async function gmailUnread(userId, n = 5) {
+  const list = await api(userId, 'https://gmail.googleapis.com/gmail/v1/users/me/messages?q='
+    + encodeURIComponent('is:unread newer_than:3d') + '&maxResults=' + n);
+  const msgs = list.messages ?? [];
+  if (!msgs.length) return '📬 Gmail: 未読はありません（3日以内）';
+  const lines = [];
+  for (const m of msgs) {
+    const d = await api(userId, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' + m.id
+      + '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date');
+    const h = Object.fromEntries((d.payload?.headers ?? []).map(x => [x.name, x.value]));
+    lines.push('• ' + (h.Subject ?? '(無題)') + ' — ' + (h.From ?? '').slice(0, 60));
+  }
+  return '📬 Gmail 未読 ' + (list.resultSizeEstimate ?? msgs.length) + '件\n' + lines.join('\n');
+}
+
+export async function calendarToday(userId) {
+  const now = new Date();
+  const start = new Date(now); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setDate(end.getDate() + 1);
+  const data = await api(userId, 'https://www.googleapis.com/calendar/v3/calendars/primary/events?'
+    + 'timeMin=' + encodeURIComponent(start.toISOString())
+    + '&timeMax=' + encodeURIComponent(end.toISOString())
+    + '&singleEvents=true&orderBy=startTime&maxResults=10');
+  const evs = data.items ?? [];
+  if (!evs.length) return '📅 今日の予定はありません';
+  const lines = evs.map(e => {
+    const t = e.start?.dateTime ? new Date(e.start.dateTime).toTimeString().slice(0, 5) : '終日';
+    return '• ' + t + ' ' + (e.summary ?? '(無題)');
+  });
+  return '📅 今日の予定\n' + lines.join('\n');
+}
+
+export function googleDisconnect(userId) {
+  vault.deleteSecret(userId, REFRESH_NAME);
+  vault.deleteSecret(userId, PROFILE_NAME);
+}

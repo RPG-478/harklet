@@ -16,11 +16,12 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | Action Buttons | Replies carry executable buttons, and direct requests are done on the spot: add/delete Home cards, reminders, memories, projects, region, briefing, model |
 | Proactive assistance | Ask in chat for reminders and a daily morning briefing |
 | Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
+| Panels | Home cards are Hark-style panels: the agent can build cards that pull live data from connected services and carry their own action buttons. Reply to the Home message to redesign them in chat |
 | Projects | Ask in chat or use the Projects button to create a topic-scoped thread |
 | Agent browser | Ask in chat for Web work; Harklet starts a per-user Quicksand Linux VM and reports the result. `/stop` saves and closes it; [setup and limits](docs/browser-agent.md) |
 | Live screen | A read-only noVNC link is sent by DM when browser work starts. With cloudflared installed, it opens over HTTPS from a phone or another network. |
 
-Gmail and GitHub are currently reachable only as websites in the agent browser after sign-in. Native account connectors and OAuth are not implemented. The GitHub Home card uses a separate token setting for a summary and does not give the chat agent GitHub API access.
+External services connect per user with OAuth — `/service connect` or just ask in chat. **Google Workspace** (Gmail unread, Calendar today) uses a loopback auth URL; **Microsoft 365** (Outlook unread, Calendar today) uses the device code flow so you can approve from a phone. Refresh tokens live in the same AES-256-GCM vault as browser logins (`HARKLET_SECRET_KEY`). Once connected, the agent can read those services on request and Home panels can display them. GitHub is reachable only as a website in the agent browser; the GitHub Home card uses a separate token for read-only summaries.
 
 For testing, set `DISCORD_GUILD_ID` and `HARKLET_ENABLE_RESET=1` when registering commands and starting the bot. `/reset` is limited to server administrators. It shows a confirmation button before deleting Harklet's managed category, its child channels, tracked project threads, and all data in Harklet's database, including saved login values. Saved browser VM cookies remain.
 
@@ -41,6 +42,7 @@ npm install
 cp .env.example .env   # Windows: copy .env.example .env
 # edit .env: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
 # optional: HARKLET_SECRET_KEY (encrypts saved logins for the agent browser)
+# optional: GOOGLE_CLIENT_ID/SECRET, M365_CLIENT_ID (per-user service connectors)
 ```
 
 4. Register commands and start:
@@ -65,6 +67,7 @@ For everyday use, write in the chat channel created by `/main set`, DM Harklet, 
 | `/memory list|forget|clear` | List / delete memories |
 | `/home open|cards|off` | Place/manage custom cards/remove the Home dashboard (auto-refresh every 30 min). AI can offer an Add to Home button that creates dynamic cards |
 | `/stop` | Stop browser work and save the VM |
+| `/service list|connect|disconnect` | Manage per-user OAuth connections to Google Workspace / Microsoft 365 (also available by asking in chat) |
 
 ## LLM backend
 
@@ -87,6 +90,7 @@ Three provider styles are supported; the active one is auto-detected from which 
 - `src/db.js` — persistence via `node:sqlite` (memories, history, reminders, settings)
 - `src/schedule.js` — natural-language-ish time parser
 - `src/computer/*` — agent browser stack: Quicksand VM control, vision loop, login-handoff modals, AES-256-GCM secret vault, authenticated noVNC viewer (+ optional Cloudflare tunnel); the VM is driven by `sidecar/quicksand_session.py`
+- `src/connect/*` — OAuth service connectors: Google Workspace (loopback URL + modal) and Microsoft 365 (device code flow), refresh tokens in the encrypted vault, provider ops callable from chat or injected into Home panels
 
 ## Notes
 

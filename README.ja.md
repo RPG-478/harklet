@@ -20,10 +20,11 @@ Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。
 | Action Buttons | AI応答に実行ボタンが付く。「消して」「作って」と頼めばAgentがその場で実行(Homeカード・リマインダー・記憶・プロジェクト・地域・ブリーフ・モデル) |
 | プロアクティブ支援 | チャットで依頼できるリマインダー配信と毎朝のモーニングブリーフ |
 | Home | `/home` — 常駐ダッシュボード。今日の一手・天気・GitHub概要・予定・記憶をカード表示。30分ごと自動更新 |
+| Panels | HomeのカードはHark流のパネル。接続済みサービスの実データを取り込むカードや、ボタン付きカードをAgentが会話から作れる。Homeメッセージへの返信で会話編集も可能 |
 | Projects | チャットやProjectsボタンから、話題別スレッドを作成 |
 | Agentブラウザ | チャットでWeb作業を依頼すると、必要に応じて専用VMのブラウザを使い、進捗と結果を通知 |
 
-GmailやGitHubは、VM内でログインしたWebサイトとして操作できます。専用のアカウント接続やOAuth連携はまだありません。
+外部サービスはユーザーごとにOAuthで接続できます。`/service connect` またはチャットで頼むだけ。**Google Workspace**（Gmail未読・カレンダー今日の予定）はループバックURL+コード入力、**Microsoft 365**（Outlook未読・予定）はデバイスコードフローでスマホから承認できます。リフレッシュトークンはブラウザログインと同じAES-256-GCM保管庫(`HARKLET_SECRET_KEY`)に入ります。接続後は会話でのデータ取得とHomeパネルへの表示が可能です。GitHubは引き続きVM内のWebサイトとして操作します（HomeのGitHub概要カードは別トークンの読み取り専用集計）。
 
 テスト用の`/reset`は、`DISCORD_GUILD_ID`と`HARKLET_ENABLE_RESET=1`を設定して`npm run register`し、同じ設定でBotを起動したときだけ使えます。対象サーバーの管理者が実行すると、Harkletのカテゴリ・配下チャンネル・プロジェクトスレッドと、Harklet DB内の全ユーザーデータ（保存済みログイン情報を含む）を削除します。実行前に削除対象を表示し、確認ボタンを押す必要があります。ブラウザVMの保存済みCookieは削除しません。
 
@@ -44,6 +45,7 @@ npm install
 cp .env.example .env   # Windows: copy .env.example .env
 # .env を編集: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
 # 任意: HARKLET_SECRET_KEY (Agentブラウザのログイン情報暗号化)
+# 任意: GOOGLE_CLIENT_ID/SECRET, M365_CLIENT_ID (サービスコネクタ用)
 ```
 
 4. コマンド登録と起動:
@@ -66,6 +68,7 @@ npm start
 | `/memory list|forget|clear` | 記憶の一覧・削除 |
 | `/home open|cards|off` | Home設置/カスタムカード管理/解除(30分ごと自動更新・更新ボタンあり)。AI提案の「ホームに追加」ボタンで動的カードが増える |
 | `/stop` | ブラウザ作業を止め、VMの状態を保存 |
+| `/service list|connect|disconnect` | Google Workspace / Microsoft 365 のユーザー別OAuth接続を管理(チャットで頼んでも可) |
 
 ## LLM バックエンド
 
@@ -88,6 +91,7 @@ npm start
 - `src/db.js` — `node:sqlite` による永続化(記憶・会話履歴・リマインダー・設定)
 - `src/schedule.js` — 自然言語ふう時刻パーサ
 - `src/computer/*` — Agentブラウザ基盤。Quicksand VM制御・視覚ループ・ログイン用モーダル・AES-256-GCMシークレット保管・認証付きnoVNCビューア(+任意でCloudflareトンネル)。VMは `sidecar/quicksand_session.py` が駆動
+- `src/connect/*` — OAuthサービスコネクタ。Google Workspace(ループバックURL+モーダル)とMicrosoft 365(デバイスコード)。リフレッシュトークンは暗号化保管庫へ。チャット実行とHomeパネルのデータ注入の両方から使える
 
 ## 注意
 

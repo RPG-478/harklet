@@ -52,3 +52,11 @@ config.home = {
   githubUser: env.GITHUB_USER?.trim() || null, // GitHub概要カード
   githubToken: env.GITHUB_TOKEN?.trim() || null, // 任意: レート制限緩和
 };
+
+// --- External service connectors (OAuth, optional) ---
+config.connect = {
+  googleClientId: env.GOOGLE_CLIENT_ID?.trim() || null,     // GCP OAuth client (Desktop app type)
+  googleClientSecret: env.GOOGLE_CLIENT_SECRET?.trim() || null,
+  m365ClientId: env.M365_CLIENT_ID?.trim() || null,         // Entra app, device code flow enabled
+  m365Tenant: env.M365_TENANT?.trim() || 'common',
+};

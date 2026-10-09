@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { store } from './db.js';
 import { ensureLoginHandoff } from './computer/login-intent.js';
+import { providerStatus, opsCatalog } from './connect/index.js';
 
 const EFFORT_BUDGET = { low: 1024, medium: 4096, high: 16384 };
 const REPLY_TIMEOUT_MS = 120_000;
@@ -40,6 +41,15 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
   「Discordにログイン」「Gmailにログイン」のような短い依頼も、専用VMのブラウザで該当サイトを開いてログインを試す依頼として扱う。Discordアプリやユーザーの端末そのものを操作する意味にはしない。
   ログイン情報が必要ならComputer Use側がDiscordの入力モーダルを本人に出し、保存した値をブラウザへ入力できる。「自分でブラウザを開いてログインしてください」と返して終わらない。モーダルを出す前にチャット本文でID・パスワードを要求しない。
   Computer Useは非同期。開始時点で完了したと報告しない。完了結果は別途通知される。GmailやGitHubの専用API接続は未実装で、専用ブラウザで開けるWebサイトだけを操作できる。
+  外部サービス(Google Workspace / Microsoft 365)との連携:
+  - {"kind":"connect","arg":"google または m365","auto":true} … Gmail/カレンダー/Outlook等のAPI接続を開始する。ユーザーが外部サービスの情報(Gmailの未読、カレンダーの予定など)を求めたのに未接続ならこれを出す。実行するとURL/コード入力の案内が表示される
+  - {"kind":"disconnect","arg":"google または m365","auto":true} … サービス接続を解除する
+  - {"kind":"service","arg":"プロバイダ:操作(例 google:gmail_unread, google:calendar_today, m365:mail_unread, m365:calendar_today)","auto":true} … 接続済みサービスのデータを今すぐ取得して表示する
+  - {"kind":"home_card_upd","arg":"JSON文字列","auto":true} … Homeの既存カードを更新。JSON: {"target":"カード名の一部","new_title":"省略可","prompt":"省略可","ops":"省略可","buttons":"省略可"}
+  home_card の arg JSON には省略可で "ops" と "buttons" を含められる:
+  - "ops": 接続済みサービスのデータ参照の配列(例 ["google:gmail_unread","google:calendar_today"])。カード生成ごとに実データが注入される。利用できる操作はコンテキストの一覧だけを使う
+  - "buttons": [{"label":"ボタン名","prompt":"押すとあなたが実行する指示"}] の配列(最大5件)。カードの下にボタンが並ぶ
+  Home画面への返信として届く編集要求は home_card_upd / home_card / home_card_del で応える。
   提案ボタンとして出すとき(autoなし)は、押す価値のあるものだけ。不要なら空配列。
 - remember: 会話から得た、今後も覚える価値のあるユーザーの事実(名前・好み・予定・進捗)。0〜2件。なければ空配列。
 - reply の中では上記のDiscord記法だけを使い、JSON構造は壊すな。`;
@@ -258,6 +268,8 @@ export async function chatDsh(userId, scope, userText) {
     memories.length ? '【このユーザーについて覚えていること】\n' + memories.map(m => '- ' + m.content).join('\n') : '',
     cards.length ? '【ユーザーのHomeに出ているカード】\n' + cards.map(c => '- ' + (c.emoji ? c.emoji + ' ' : '') + c.title + '（内容指示: ' + String(c.prompt).slice(0, 80) + '）').join('\n') : '',
     city ? '【ユーザーの地域】' + city + '（Homeの天気カードはこの地域）' : '',
+    (() => { const l = providerStatus(userId); return l.length ? '【外部サービス接続状況(ユーザー個別)】' + l.join(' / ') : ''; })(),
+    (() => { const l = opsCatalog(userId); return l.length ? '【接続済みサービスの操作(service/home_cardのopsに使える)】' + l.join(' / ') : ''; })(),
     '【現在日時】' + new Date().toISOString(),
   ].filter(Boolean).join('\n');
 
