@@ -16,7 +16,7 @@ Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。
 
 | Hark Pro | harklet での実装 |
 | --- | --- |
-| 記憶を持つチャット | `/ask` + ユーザーごとの長期記憶(SQLite)。会話から重要な事実を自動抽出して保存 |
+| 記憶を持つチャット | chatチャンネル・DM・メンションでの会話 + ユーザーごとの長期記憶(SQLite)。重要な事実を自動抽出して保存 |
 | Action Buttons | AI応答に実行ボタンが付く。「消して」「作って」と頼めばAgentがその場で実行(Homeカード・リマインダー・記憶・プロジェクト・地域・ブリーフ・モデル) |
 | プロアクティブ支援 | リマインダーと毎朝のブリーフに加え、繰り返し作業の時期が来たらDMで提案。ブラウザ作業は依頼またはボタン操作で開始 |
 | Specialties | チャットで繰り返す作業のやり方を教えられる。ブラウザ作業の完了時にAgentが再利用価値を判断して覚え、名前で再実行できる |
@@ -38,7 +38,7 @@ Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。
 2. OAuth2 → URL Generator で `bot` + `applications.commands` を選択し、Bot Permissions は `Send Messages` `Create Public Threads` `Read Message History` を付けて招待。
 
    必要なBot権限（ビットフィールド `3197968`）:
-   - チャンネルの閲覧、メッセージ送信、スレッドでのメッセージ送信、公開スレッド作成、メッセージ履歴の閲覧、**チャンネルの管理**(`/main set` の自動作成用)
+   - チャンネルの閲覧、メッセージ送信、スレッドでのメッセージ送信、公開スレッド作成、メッセージ履歴の閲覧、**チャンネルの管理**(`/start` の自動作成用)
 
    招待URLテンプレート: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197968&scope=bot%20applications.commands`
 3. リポジトリをセットアップ:
@@ -61,13 +61,13 @@ npm start
 
 ## コマンド
 
-普段は`/main set`で作ったchatチャンネル、DM、またはメンションで普通に話しかけてください。Web作業、記憶、リマインダー、プロジェクト、ブリーフィングを会話から頼めます。`/ask`は個別に返答がほしいときの近道です。
+最初に`/start`で作ったchatチャンネル、DM、またはメンションで普通に話しかけてください。Web作業、記憶、リマインダー、プロジェクト、ブリーフィングを会話から頼めます。非公開の依頼はDMで送ってください。
 
 | コマンド | 説明 |
 | --- | --- |
-| `/ask <question>` | アシスタントに質問。記憶を踏まえて回答し、実行ボタンを提案 |
-| `/model` | Embed + プルダウンでモデル＆Reasoning effortをユーザーごとに切替。一覧はAPIから自動取得し、選択は「決定」ボタンで確定 |
-| `/main set|off|show` | メインチャンネル設定。`set` で Harklet カテゴリ(chat/home/projects)も自動生成（要「サーバー管理」+Botに「チャンネル管理」） |
+| `/start` | Harkletカテゴリとchat/home/projectsを設置。再実行時は既存チャンネルを再利用（要「サーバー管理」+Botに「チャンネル管理」） |
+| `/model` | APIキーで利用可能なモデルを取得。検索・ページ送りで選び、Reasoning effortとともに「決定」で確定 |
+| `/main set|off|show` | 既存チャンネルをメイン会話先に設定・解除・表示。`set`はチャンネルを作成しない |
 | `/memory list|forget|clear` | 記憶の一覧・削除 |
 | `/home open|cards|off` | Home設置/カスタムカード管理/解除(30分ごと自動更新・更新ボタンあり)。AI提案の「ホームに追加」ボタンで動的カードが増える |
 | `/stop` | ブラウザ作業を止め、VMの状態を保存 |
@@ -99,7 +99,7 @@ npm start
 ## 注意
 
 - Message Content Intent を使うため、Bot が **1万ユニークユーザー** を超える場合は Discord の審査が必要です(2026/6 改訂)。それ未満なら Portal のトグルで動きます。
-- 応答生成中はDiscord標準の「入力中…」タイピング表示を使います(`/ask` は「考え中…」)。
+- 応答生成中はDiscord標準の「入力中…」タイピング表示を使います。
 - Message Content Intent が未許可でも、DM と Botへのメンションは本文が届くため会話できます(チャンネル内の自由会話のみ不可)。
 - AI の自動記憶抽出は誤爆しえます。`/memory list` / `forget` で管理してください。
 

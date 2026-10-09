@@ -8,7 +8,7 @@ import { config } from './config.js';
 import { store, clearHarkletDatabase } from './db.js';
 import { chatDsh, invalidateUserAgents, recordComputerOutcome, shutdownDsh } from './dsh-agent.js';
 import { homePayload, geocodeCity } from './home.js';
-import { listModels } from './llm.js';
+import { listModels, modelChoices } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
 import { handleComputerInteraction, startComputerTask, computerIsBusy } from './computer/controller.js';
 import { detachedProjectThreads } from './reset-plan.js';
@@ -31,17 +31,13 @@ function makeClient(withContent) {
 let client = makeClient(true);
 
 // ---------- helpers ----------
-const FALLBACK_MODELS = [
-  'openai/gpt-4.1-mini', 'openai/gpt-4.1', 'openai/o4-mini',
-  'anthropic/claude-sonnet-4-5', 'anthropic/claude-haiku-4-5',
-  'google/gemini-2.5-flash', 'google/gemini-2.5-pro', 'x-ai/grok-code-fast-1',
-];
 const SKIP_MODEL = /embed|whisper|tts|image|audio|dall-e|moderation|transcrib/i;
-const MODEL_RANK = /gpt|claude|gemini|grok|o4|deepseek|qwen|llama|mistral/i;
 
 // /model パネルで選択中(未適用)の値。決定ボタンで確定する。
 const pendingModelSel = new Map(); // userId -> model
 const pendingEffortSel = new Map(); // userId -> effort|'default'
+const modelPages = new Map(); // userId -> page index
+const modelQueries = new Map(); // userId -> search term
 const pendingResets = new Map(); // guildId -> { userId, expires }
 const resettingGuilds = new Set();
 // Google OAuth ループバック用 state → 誰の接続フローか (CSRF防止・モーダル検証)
@@ -93,14 +89,13 @@ async function modelPanel(userId) {
   const current = s.model || config.llm.model;
   const stagedModel = pendingModelSel.get(userId);
   const stagedEffort = pendingEffortSel.get(userId);
-  let models = await listModels();
-  if (!models.length) models = FALLBACK_MODELS;
-  models = models.filter(m => !SKIP_MODEL.test(m));
+  const catalog = await listModels();
+  const models = catalog.ids.filter(m => !SKIP_MODEL.test(m));
   const shown = stagedModel ?? current;
   const shownEffort = stagedEffort ?? s.effort ?? 'default';
-  const choices = [shown, ...models.filter(m => m !== shown)
-    .sort((a, b) => Number(MODEL_RANK.test(b)) - Number(MODEL_RANK.test(a)) || a.localeCompare(b))]
-    .slice(0, 25);
+  const query = modelQueries.get(userId) ?? '';
+  const { choices, page, pageCount } = modelChoices(models, shown, query, modelPages.get(userId) ?? 0);
+  modelPages.set(userId, page);
   const embed = new EmbedBuilder()
     .setTitle('🧠 LLM 設定')
     .setColor(0x5865f2)
@@ -109,7 +104,9 @@ async function modelPanel(userId) {
       { name: 'effort', value: shownEffort + (stagedEffort ? ' *(未適用)*' : ''), inline: true },
       { name: 'provider', value: config.llm.provider, inline: true },
     )
-    .setFooter({ text: models.length + ' models from API / 選択はあなた個人の設定です' });
+    .setFooter({ text: `${models.length} models (${catalog.source}) / ${page + 1}/${pageCount} ページ / 個人設定` });
+  if (catalog.error) embed.addFields({ name: 'モデル一覧', value: catalog.error });
+  if (query) embed.addFields({ name: '検索', value: query.slice(0, 100) });
   const modelMenu = new StringSelectMenuBuilder()
     .setCustomId('model_sel')
     .setPlaceholder('モデルを選択 (' + choices.length + ')')
@@ -126,11 +123,15 @@ async function modelPanel(userId) {
   const applyBtn = new ButtonBuilder().setCustomId('model_apply').setLabel('決定').setStyle(ButtonStyle.Success);
   const customBtn = new ButtonBuilder().setCustomId('model_custom').setLabel('自由入力').setStyle(ButtonStyle.Secondary);
   const resetBtn = new ButtonBuilder().setCustomId('model_reset').setLabel('リセット').setStyle(ButtonStyle.Danger);
+  const prevBtn = new ButtonBuilder().setCustomId('model_prev').setLabel('前へ').setStyle(ButtonStyle.Secondary).setDisabled(page === 0);
+  const nextBtn = new ButtonBuilder().setCustomId('model_next').setLabel('次へ').setStyle(ButtonStyle.Secondary).setDisabled(page + 1 >= pageCount);
+  const searchBtn = new ButtonBuilder().setCustomId('model_search').setLabel('検索').setStyle(ButtonStyle.Secondary);
   return {
     embeds: [embed],
     components: [
       new ActionRowBuilder().addComponents(modelMenu),
       new ActionRowBuilder().addComponents(effortMenu),
+      new ActionRowBuilder().addComponents(prevBtn, nextBtn, searchBtn),
       new ActionRowBuilder().addComponents(applyBtn, customBtn, resetBtn),
     ],
   };
@@ -394,30 +395,6 @@ async function runAction(interaction, action) {
   return interaction.reply(asReply(result, true));
 }
 
-async function answer(interaction) {
-  const question = interaction.options.getString("question", true);
-  const ephemeral = interaction.options.getBoolean("private") ?? false;
-  await interaction.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {});
-  try {
-    const scope = "u:" + interaction.user.id;
-    const result = await chatDsh(interaction.user.id, scope, question);
-    const all = Array.isArray(result.actions) ? result.actions : [];
-    const autos = all.filter(a => a?.auto === true || a?.kind === 'computer');
-    await interaction.editReply({
-      content: result.reply.slice(0, 1900),
-      components: actionRows(interaction.user.id, all.filter(a => a?.auto !== true && a?.kind !== 'computer')),
-    });
-    for (const a of autos) {
-      const browserAction = ['computer', 'specialty_run'].includes(a.kind);
-      const computerChannel = browserAction && ephemeral ? await interaction.user.createDM().catch(() => null) : null;
-      const r = await execAction({ userId: interaction.user.id, channel: interaction.channel, action: a, scope, computerChannel, privateComputer: browserAction && ephemeral }).catch(e => "⚠️ " + e.message);
-      if (r) await interaction.followUp(asReply(r, ephemeral)).catch(() => {});
-    }
-  } catch (e) {
-    await interaction.editReply("⚠️ エラー: " + e.message);
-  }
-}
-
 // ---------- command handlers ----------
 
 const handlers = {
@@ -425,10 +402,9 @@ const handlers = {
     await i.reply({ content: `🏓 pong — ${client.ws.ping}ms`, flags: MessageFlags.Ephemeral });
   },
 
-  ask: (i) => answer(i),
-
   async model(i) {
-    await i.reply({ ...(await modelPanel(i.user.id)), flags: MessageFlags.Ephemeral });
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    await i.editReply(await modelPanel(i.user.id));
   },
 
   async reset(i) {
@@ -447,6 +423,47 @@ const handlers = {
     });
   },
 
+  async start(i) {
+    if (!i.guildId) return i.reply({ content: 'サーバー内で実行してください。', flags: MessageFlags.Ephemeral });
+    if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      return i.reply({ content: 'セットアップには「サーバー管理」権限が必要です。', flags: MessageFlags.Ephemeral });
+    }
+    await i.deferReply();
+    if (!i.guild?.members?.me?.permissions?.has(PermissionFlagsBits.ManageChannels)) {
+      return i.editReply('❌ Botに「チャンネル管理」権限が必要です。招待URLの permissions は 3197968 が必要です(README参照)。');
+    }
+    try {
+      const categoryId = store.getManagedCategory(i.guildId);
+      let cat = categoryId ? await i.guild.channels.fetch(categoryId).catch(() => null) : null;
+      if (!cat || cat.type !== ChannelType.GuildCategory) {
+        cat = await i.guild.channels.create({ name: 'Harklet', type: ChannelType.GuildCategory });
+        store.setManagedCategory(i.guildId, cat.id);
+      }
+      const children = await i.guild.channels.fetch();
+      const ensureChannel = async name => children.find(ch => ch?.parentId === cat.id && ch.type === ChannelType.GuildText && ch.name === name)
+        ?? i.guild.channels.create({ name, type: ChannelType.GuildText, parent: cat.id });
+      const main = await ensureChannel('chat');
+      const homeCh = await ensureChannel('home');
+      const projCh = await ensureChannel('projects');
+      store.setMain(i.guildId, main.id, i.user.id);
+      store.setProjectChannel(i.guildId, projCh.id);
+      const previousHome = store.homeTargets().find(h => h.user_id === i.user.id && h.home_channel_id === homeCh.id);
+      if (!previousHome) {
+        const m = await homeCh.send(await homePayload(i.user.id, actionRows));
+        store.setHome(i.user.id, homeCh.id, m.id);
+      }
+      if (projCh.lastMessageId == null) await projCh.send({
+        content: '📁 **プロジェクト** — 話題ごとの会話スレッド。\n下のボタンか、チャットで頼んで新しいプロジェクトを作成します。',
+        components: [new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('proj_new').setLabel('新規プロジェクト').setEmoji('➕').setStyle(ButtonStyle.Primary),
+        )],
+      });
+      return i.editReply(`📍 セットアップしました: 💬<#${main.id}> / 🏠<#${homeCh.id}> / 📁<#${projCh.id}>\nchat への書き込みはそのまま会話になります。home は30分ごとに自動更新。`);
+    } catch (e) {
+      return i.editReply('❌ セットアップに失敗: ' + e.message);
+    }
+  },
+
   async main(i) {
     const sub = i.options.getSubcommand();
     if (!i.guildId) return i.reply({ content: 'サーバー内で実行してください。', flags: MessageFlags.Ephemeral });
@@ -454,40 +471,22 @@ const handlers = {
       if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
         return i.reply({ content: 'メインチャンネルの設定には「サーバー管理」権限が必要です。', flags: MessageFlags.Ephemeral });
       }
-      await i.deferReply();
-      const me = i.guild?.members?.me;
-      if (!me?.permissions?.has(PermissionFlagsBits.ManageChannels)) {
-        return i.editReply('❌ Botに「チャンネル管理」権限が必要です。招待URLの permissions は 3197968 が必要です(README参照)。');
+      const main = i.options.getChannel('channel') ?? i.channel;
+      if (main?.type !== ChannelType.GuildText) return i.reply({ content: 'テキストチャンネルを指定してください。', flags: MessageFlags.Ephemeral });
+      const botMember = i.guild.members.me ?? await i.guild.members.fetchMe();
+      const botPermissions = main.permissionsFor(botMember);
+      if (!botPermissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory])) {
+        return i.reply({ content: 'Botがそのチャンネルを閲覧・投稿できる権限を付けてください。', flags: MessageFlags.Ephemeral });
       }
-      try {
-        const cat = await i.guild.channels.create({ name: 'Harklet', type: ChannelType.GuildCategory });
-        store.setManagedCategory(i.guildId, cat.id);
-        let main = i.options.getChannel('channel');
-        if (!main) main = await i.guild.channels.create({ name: 'chat', type: ChannelType.GuildText, parent: cat.id });
-        const homeCh = await i.guild.channels.create({ name: 'home', type: ChannelType.GuildText, parent: cat.id });
-        const projCh = await i.guild.channels.create({ name: 'projects', type: ChannelType.GuildText, parent: cat.id });
-        store.setMain(i.guildId, main.id, i.user.id);
-        store.setProjectChannel(i.guildId, projCh.id);
-        const m = await homeCh.send(await homePayload(i.user.id, actionRows));
-        store.setHome(i.user.id, homeCh.id, m.id);
-        await projCh.send({
-          content: '📁 **プロジェクト** — 話題ごとの会話スレッド。\n下のボタンか、チャットで頼んで新しいプロジェクトを作成します。',
-          components: [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('proj_new').setLabel('新規プロジェクト').setEmoji('➕').setStyle(ButtonStyle.Primary),
-          )],
-        });
-        return i.editReply(`📍 セットアップしました: 💬<#${main.id}> / 🏠<#${homeCh.id}> / 📁<#${projCh.id}>\nchat への書き込みはそのまま会話になります。home は30分ごとに自動更新。`);
-      } catch (e) {
-        return i.editReply('❌ チャンネル作成に失敗: ' + e.message);
-      }
+      store.setMain(i.guildId, main.id, i.user.id);
+      return i.reply({ content: `📍 メインチャンネルを <#${main.id}> に設定しました。` });
     }
     if (sub === 'off') {
       if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
         return i.reply({ content: '「サーバー管理」権限が必要です。', flags: MessageFlags.Ephemeral });
       }
       store.clearMain(i.guildId);
-      store.clearProjectChannel(i.guildId);
-      return i.reply({ content: '📍 メイン/プロジェクト設定を解除しました(チャンネル自体は残ります)' });
+      return i.reply({ content: '📍 メインチャンネル設定を解除しました(チャンネル自体は残ります)' });
     }
     const ch = store.getMain(i.guildId);
     const pj = store.getProjectChannel(i.guildId);
@@ -782,11 +781,25 @@ client.on('interactionCreate', async (interaction) => {
       modal.addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('model_name')
           .setLabel('モデル名 (例: openai/gpt-5, anthropic/claude-sonnet-4-5)')
-          .setStyle(TextInputStyle.Short).setRequired(true),
+          .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100),
       ));
       await interaction.showModal(modal);
+    } else if (interaction.isButton() && interaction.customId === 'model_search') {
+      const modal = new ModalBuilder().setCustomId('model_search_modal').setTitle('モデルを検索');
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('model_query').setLabel('モデルIDの一部（空欄で検索解除）')
+          .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100)
+          .setValue(modelQueries.get(interaction.user.id) ?? ''),
+      ));
+      await interaction.showModal(modal);
+    } else if (interaction.isButton() && ['model_prev', 'model_next'].includes(interaction.customId)) {
+      const uid = interaction.user.id;
+      modelPages.set(uid, Math.max(0, (modelPages.get(uid) ?? 0) + (interaction.customId === 'model_next' ? 1 : -1)));
+      await interaction.deferUpdate();
+      await interaction.editReply(await modelPanel(uid));
     } else if (interaction.isButton() && interaction.customId === 'model_apply') {
       const uid = interaction.user.id;
+      await interaction.deferUpdate();
       const m = pendingModelSel.get(uid);
       const e = pendingEffortSel.get(uid);
       if (m) store.setModel(uid, m);
@@ -794,15 +807,18 @@ client.on('interactionCreate', async (interaction) => {
       pendingModelSel.delete(uid);
       pendingEffortSel.delete(uid);
       if (m || e) await invalidateUserAgents(uid);
-      await interaction.update(await modelPanel(uid));
+      await interaction.editReply(await modelPanel(uid));
     } else if (interaction.isButton() && interaction.customId === 'model_reset') {
       const uid = interaction.user.id;
+      await interaction.deferUpdate();
       pendingModelSel.delete(uid);
       pendingEffortSel.delete(uid);
+      modelPages.delete(uid);
+      modelQueries.delete(uid);
       store.setModel(uid, null);
       store.setEffort(uid, null);
       await invalidateUserAgents(uid);
-      await interaction.update(await modelPanel(uid));
+      await interaction.editReply(await modelPanel(uid));
     } else if (interaction.isButton() && interaction.customId === 'home_refresh') {
       await interaction.deferUpdate();
       try { await interaction.message.edit(await homePayload(interaction.user.id, actionRows)); } catch {}
@@ -909,10 +925,19 @@ client.on('interactionCreate', async (interaction) => {
       } catch (e) {
         await interaction.editReply('⚠️ 接続失敗: ' + e.message).catch(() => {});
       }
+   } else if (interaction.isModalSubmit() && interaction.customId === 'model_search_modal') {
+      const uid = interaction.user.id;
+      const query = interaction.fields.getTextInputValue('model_query').trim();
+      if (query) modelQueries.set(uid, query);
+      else modelQueries.delete(uid);
+      modelPages.set(uid, 0);
+      await interaction.deferUpdate();
+      await interaction.editReply(await modelPanel(uid));
    } else if (interaction.isModalSubmit() && interaction.customId === 'model_modal') {
       const name = interaction.fields.getTextInputValue('model_name').trim();
       pendingModelSel.set(interaction.user.id, name);
-      await interaction.update(await modelPanel(interaction.user.id));
+      await interaction.deferUpdate();
+      await interaction.editReply(await modelPanel(interaction.user.id));
     } else if (interaction.isModalSubmit() && interaction.customId === 'proj_modal') {
       const topic = interaction.fields.getTextInputValue('proj_topic').trim();
       const ch = interaction.channel;
@@ -946,12 +971,13 @@ client.on('interactionCreate', async (interaction) => {
       await thread.send(`📁 プロジェクト「${topic}」。${interaction.user} との会話をここに記録します。はじめの一言をどうぞ。`);
       await interaction.reply({ content: `📁 プロジェクトを作成しました: ${thread}`, flags: MessageFlags.Ephemeral });
     } else if (interaction.isStringSelectMenu()) {
+      await interaction.deferUpdate();
       if (interaction.customId === 'model_sel') {
         pendingModelSel.set(interaction.user.id, interaction.values[0]);
       } else if (interaction.customId === 'effort_sel') {
         pendingEffortSel.set(interaction.user.id, interaction.values[0]);
       }
-      await interaction.update(await modelPanel(interaction.user.id));
+      await interaction.editReply(await modelPanel(interaction.user.id));
     }
   } catch (e) {
     console.error(e);

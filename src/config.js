@@ -31,19 +31,23 @@ const PROVIDER_DEFAULTS = {
   google:    { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash' },
 };
 
-const isOpenRouter = !env.OPENAI_API_KEY && !!env.OPENROUTER_API_KEY;
+const openaiBaseUrl = env.OPENAI_BASE_URL || env.OPENROUTER_BASE_URL ||
+  (!env.OPENAI_API_KEY && env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1' : PROVIDER_DEFAULTS.openai.baseUrl);
+const isOpenRouter = (() => {
+  try { return new URL(openaiBaseUrl).hostname === 'openrouter.ai'; } catch { return false; }
+})();
 config.llm = {
   provider,
   apiKey:
-    (provider === 'openai' ? (env.LLM_API_KEY || env.OPENAI_API_KEY || env.OPENROUTER_API_KEY)
+    (provider === 'openai' ? (env.LLM_API_KEY || (isOpenRouter ? env.OPENROUTER_API_KEY || env.OPENAI_API_KEY : env.OPENAI_API_KEY || env.OPENROUTER_API_KEY))
      : provider === 'anthropic' ? (env.LLM_API_KEY || env.ANTHROPIC_API_KEY)
      : (env.LLM_API_KEY || env.GEMINI_API_KEY || env.GOOGLE_API_KEY))?.trim() || '',
   baseUrl: (
-    (provider === 'openai' ? (env.OPENAI_BASE_URL || env.OPENROUTER_BASE_URL || (isOpenRouter ? 'https://openrouter.ai/api/v1' : null))
+    (provider === 'openai' ? openaiBaseUrl
      : provider === 'anthropic' ? env.ANTHROPIC_BASE_URL
      : env.GOOGLE_BASE_URL) || PROVIDER_DEFAULTS[provider].baseUrl
   ).replace(/\/+$/, ''),
-  model: (env.LLM_MODEL || env.OPENAI_MODEL || PROVIDER_DEFAULTS[provider].model).trim(),
+  model: (env.LLM_MODEL || env.OPENAI_MODEL || (isOpenRouter && provider === 'openai' ? 'openai/gpt-4.1-mini' : PROVIDER_DEFAULTS[provider].model)).trim(),
 };
 
 // --- Home dashboard cards ---

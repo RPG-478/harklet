@@ -14,7 +14,7 @@ Chat browser work uses a dedicated Quicksand Linux VM and does not require Docke
 
 | Hark Pro | harklet 实现 |
 | --- | --- |
-| 带记忆的对话 | `/ask` + 每用户长期记忆（SQLite）。自动从对话中提取关键事实 |
+| 带记忆的对话 | 在聊天频道、私信或提及机器人时对话，使用每用户长期记忆（SQLite） |
 | 操作按钮 | AI回复附带可执行按钮；直接下达"删除""创建"等指令时Agent立即执行（主页卡片/提醒/记忆/项目/地区/简报/模型） |
 | 主动协助 | 提醒、每日晨间简报，以及重复任务到期时的私信建议；浏览器任务仍需用户请求或点击按钮 |
 | Specialties | 在聊天中教助手重复任务的步骤；浏览器任务完成时，Agent 会判断其复用价值并记住，可按名称再次执行 |
@@ -33,7 +33,7 @@ Chat browser work uses a dedicated Quicksand Linux VM and does not require Docke
 2. 通过 OAuth2 → URL Generator 邀请 Bot，scope 选择 `bot` + `applications.commands`，权限勾选 `Send Messages` `Create Public Threads` `Read Message History`。
 
    所需 Bot 权限（位掩码 `3197968`）:
-   - 查看频道、发送消息、在子区发送消息、创建公开子区、读取消息历史、**管理频道**（`/main set` 自动创建用）
+   - 查看频道、发送消息、在子区发送消息、创建公开子区、读取消息历史、**管理频道**（`/start` 自动创建用）
 
    邀请链接模板: `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3197968&scope=bot%20applications.commands`
 3. 安装并配置：
@@ -62,9 +62,9 @@ npm start
 
 | 命令 | 说明 |
 | --- | --- |
-| `/ask <question>` | 向助手提问。回复基于你的记忆，并可附带操作按钮 |
-| `/model` | Embed + 下拉菜单为每用户切换模型与推理强度（列表自动从API获取，选择后需按「决定」确认） |
-| `/main set|off|show` | 设置主频道，频道内直接发言即可与助手对话（需"管理服务器"权限） |
+| `/start` | 设置 Harklet 分类及 chat/home/projects 频道；再次运行时复用已有频道 |
+| `/model` | 从当前 API 密钥可用模型中搜索或翻页，选择模型与推理强度后确认 |
+| `/main set|off|show` | 将已有频道设为主聊天频道、关闭或查看；`set` 不创建频道 |
 | `/memory list|forget|clear` | 查看 / 删除记忆 |
 | `/home open|cards|off` | 放置/管理自定义卡片/移除 Home（每 30 分钟自动刷新，附刷新按钮）。AI 可提议“添加到主页”生成动态卡片 |
 | `/stop` | 停止浏览器任务并保存虚拟机 |
@@ -96,7 +96,7 @@ npm start
 ## 注意
 
 - Bot 超过 **1 万独立用户** 后，Message Content Intent 需要 Discord 审核（2026 年 6 月修订）。在此之下，Portal 开关即可。
-- 模型思考期间使用 Discord 原生「正在输入…」提示（`/ask` 为「正在思考」）。
+- 模型思考期间使用 Discord 原生「正在输入…」提示。
 - 自动提取的记忆可能有误，可用 `/memory list` / `/memory forget` 管理。
 
 ## License
