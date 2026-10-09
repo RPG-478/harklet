@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import shutil
 import sys
 import uuid
 from pathlib import Path
@@ -107,6 +108,10 @@ async def main():
         pending = pointer.with_suffix(".tmp")
         pending.write_text(json.dumps({"save": next_name}), encoding="utf-8")
         os.replace(pending, pointer)
+        # Drop the superseded save so overlays do not fill the disk.
+        # The base image lives in site-packages and is never under `saves`.
+        if current != name and (saved / "manifest.json").exists():
+            await asyncio.to_thread(shutil.rmtree, saved, True)
     finally:
         await vm.stop()
 
