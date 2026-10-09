@@ -65,7 +65,7 @@ function describe(a) {
 export async function runComputerTask(opts) {
   const {
     userId, task, sessionId, browser, vault, decide, requestSecrets, chooseAuthMethod, shareAuthQr, requestHuman, progress,
-    signal, maxSteps = 25, deadlineMs = 15 * 60 * 1000, settleMs = 700,
+    signal, maxSteps = 40, deadlineMs = 15 * 60 * 1000, settleMs = 700,
     sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   } = opts;
   const started = Date.now();
