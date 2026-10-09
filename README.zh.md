@@ -15,10 +15,12 @@ Chat browser work uses a dedicated Quicksand Linux VM and does not require Docke
 | Hark Pro | harklet 实现 |
 | --- | --- |
 | 带记忆的对话 | `/ask` + 每用户长期记忆（SQLite）。自动从对话中提取关键事实 |
-| 操作按钮 | AI 回复附带可执行按钮，如"设置提醒""保存到记忆" |
+| 操作按钮 | AI回复附带可执行按钮；直接下达"删除""创建"等指令时Agent立即执行（主页卡片/提醒/记忆/项目/地区/简报/模型） |
 | 主动协助 | 在聊天中请求定时提醒和每日晨间简报 |
 | Home | `/home` —— 常驻仪表盘消息：今日行动、天气、GitHub 概要、提醒、记忆卡片，每 30 分钟自动刷新 |
 | Projects | 在聊天中请求创建项目子区，或使用 Projects 按钮 |
+| Agent浏览器 | 在聊天中请求网页操作；Harklet 启动每用户专用 Quicksand Linux VM 并汇报结果。`/stop` 保存并关闭；[设置与限制](docs/browser-agent.md) |
+| 实时画面 | 浏览器任务开始时通过私信发送只读 noVNC 链接。安装 cloudflared 后可通过 HTTPS 在手机或其他网络查看 |
 
 ## 安装
 
@@ -36,6 +38,7 @@ Chat browser work uses a dedicated Quicksand Linux VM and does not require Docke
 npm install
 cp .env.example .env   # Windows: copy .env.example .env
 # 编辑 .env: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
+# 可选: HARKLET_SECRET_KEY（加密 Agent 浏览器保存的登录信息）
 ```
 
 4. 注册命令并启动：
@@ -81,11 +84,12 @@ npm start
 - `src/llm.js` —— 按提供商自动获取模型列表
 - `src/db.js` —— 基于 `node:sqlite` 的持久化（记忆、历史、提醒、设置）
 - `src/schedule.js` —— 自然语言时间解析器
+- `src/computer/*` —— Agent浏览器栈：Quicksand VM 控制、视觉循环、登录模态框、AES-256-GCM 密钥保管库、带认证的 noVNC 查看器（可选 Cloudflare 隧道）；VM 由 `sidecar/quicksand_session.py` 驱动
 
 ## 注意
 
 - Bot 超过 **1 万独立用户** 后，Message Content Intent 需要 Discord 审核（2026 年 6 月修订）。在此之下，Portal 开关即可。
-- 模型思考期间会显示「Harkletが返信中……」占位消息，收到回复后原地编辑替换。
+- 模型思考期间使用 Discord 原生「正在输入…」提示（`/ask` 为「正在思考」）。
 - 自动提取的记忆可能有误，可用 `/memory list` / `/memory forget` 管理。
 
 ## License

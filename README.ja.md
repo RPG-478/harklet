@@ -17,7 +17,7 @@ Hark Pro に着想を得たパーソナル AI アシスタント Discord Bot。
 | Hark Pro | harklet での実装 |
 | --- | --- |
 | 記憶を持つチャット | `/ask` + ユーザーごとの長期記憶(SQLite)。会話から重要な事実を自動抽出して保存 |
-| Action Buttons | AI の応答に「リマインダー設定」「記憶に保存」などの実行ボタンが付く |
+| Action Buttons | AI応答に実行ボタンが付く。「消して」「作って」と頼めばAgentがその場で実行(Homeカード・リマインダー・記憶・プロジェクト・地域・ブリーフ・モデル) |
 | プロアクティブ支援 | チャットで依頼できるリマインダー配信と毎朝のモーニングブリーフ |
 | Home | `/home` — 常駐ダッシュボード。今日の一手・天気・GitHub概要・予定・記憶をカード表示。30分ごと自動更新 |
 | Projects | チャットやProjectsボタンから、話題別スレッドを作成 |
@@ -43,6 +43,7 @@ GmailやGitHubは、VM内でログインしたWebサイトとして操作でき�
 npm install
 cp .env.example .env   # Windows: copy .env.example .env
 # .env を編集: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
+# 任意: HARKLET_SECRET_KEY (Agentブラウザのログイン情報暗号化)
 ```
 
 4. コマンド登録と起動:
@@ -86,11 +87,12 @@ npm start
 - `src/llm.js` — プロバイダ別のモデル一覧自動取得
 - `src/db.js` — `node:sqlite` による永続化(記憶・会話履歴・リマインダー・設定)
 - `src/schedule.js` — 自然言語ふう時刻パーサ
+- `src/computer/*` — Agentブラウザ基盤。Quicksand VM制御・視覚ループ・ログイン用モーダル・AES-256-GCMシークレット保管・認証付きnoVNCビューア(+任意でCloudflareトンネル)。VMは `sidecar/quicksand_session.py` が駆動
 
 ## 注意
 
 - Message Content Intent を使うため、Bot が **1万ユニークユーザー** を超える場合は Discord の審査が必要です(2026/6 改訂)。それ未満なら Portal のトグルで動きます。
-- 応答生成中は「Harkletが返信中……」というプレースホルダを表示し、回答が届いたらそのメッセージを書き換えます。
+- 応答生成中はDiscord標準の「入力中…」タイピング表示を使います(`/ask` は「考え中…」)。
 - Message Content Intent が未許可でも、DM と Botへのメンションは本文が届くため会話できます(チャンネル内の自由会話のみ不可)。
 - AI の自動記憶抽出は誤爆しえます。`/memory list` / `forget` で管理してください。
 

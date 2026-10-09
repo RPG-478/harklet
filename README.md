@@ -13,7 +13,7 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | Hark Pro | In harklet |
 | --- | --- |
 | Chat with memory | `/ask` + per-user long-term memory (SQLite). Key facts are auto-extracted from conversation |
-| Action Buttons | AI replies come with executable buttons such as "set reminder" and "save to memory" |
+| Action Buttons | Replies carry executable buttons, and direct requests are done on the spot: add/delete Home cards, reminders, memories, projects, region, briefing, model |
 | Proactive assistance | Ask in chat for reminders and a daily morning briefing |
 | Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
 | Projects | Ask in chat or use the Projects button to create a topic-scoped thread |
@@ -40,6 +40,7 @@ For testing, set `DISCORD_GUILD_ID` and `HARKLET_ENABLE_RESET=1` when registerin
 npm install
 cp .env.example .env   # Windows: copy .env.example .env
 # edit .env: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
+# optional: HARKLET_SECRET_KEY (encrypts saved logins for the agent browser)
 ```
 
 4. Register commands and start:
@@ -85,11 +86,12 @@ Three provider styles are supported; the active one is auto-detected from which 
 - `src/llm.js` — model list auto-discovery per provider
 - `src/db.js` — persistence via `node:sqlite` (memories, history, reminders, settings)
 - `src/schedule.js` — natural-language-ish time parser
+- `src/computer/*` — agent browser stack: Quicksand VM control, vision loop, login-handoff modals, AES-256-GCM secret vault, authenticated noVNC viewer (+ optional Cloudflare tunnel); the VM is driven by `sidecar/quicksand_session.py`
 
 ## Notes
 
 - The Message Content Intent requires Discord verification once the bot exceeds **10,000 unique users** (June 2026 revision). Below that, the Developer Portal toggle is enough.
-- While the model is thinking, the bot posts `Harkletが返信中……` and edits that message in place once the answer arrives.
+- While the model is thinking, Discord native typing indicator is used (`/ask` uses the standard thinking state).
 - Auto-extracted memories can misfire. Manage them with `/memory list` and `/memory forget`.
 
 ## License
