@@ -7,6 +7,7 @@ import { store } from './db.js';
 import { chatDsh } from './dsh-agent.js';
 import { fmtTs } from './schedule.js';
 import { fetchOps } from './connect/index.js';
+import { specialtyDue } from './specialties.js';
 
 const HOME_COLOR = 0x5865f2;
 
@@ -102,6 +103,17 @@ function memoryCard(userId) {
     .setFooter({ text: '/memory list で全件・forget で削除' });
 }
 
+function specialtiesCard(userId) {
+  const list = store.listSpecialties(userId);
+  if (!list.length) return null;
+  const due = list.filter(s => specialtyDue(s)).slice(0, 3);
+  const shown = due.length ? due : list.slice(0, 3);
+  const lines = shown.map(s => `• ${s.name}${specialtyDue(s) ? ' — そろそろ再実行' : ''}`);
+  return new EmbedBuilder().setTitle('🔁 覚えた作業')
+    .setColor(0x57f287)
+    .setDescription(lines.join('\n') + '\nチャットで「この作業をもう一度」と頼めます。');
+}
+
 // ユーザーのカスタムカード(パネル): 接続サービスのデータ(ops)を先に取得し、
 // それを材料に登録プロンプトで内容を生成。ボタン定義があればインタラクション用に返す。
 async function customCard(userId, c) {
@@ -130,7 +142,7 @@ async function customCard(userId, c) {
 export async function homePayload(userId, actionRows) {
   const customs = store.listHomeCards(userId).slice(0, 4);
   const [brief, weather, gh, ...customEmbeds] = await Promise.all([briefCard(userId), weatherCard(userId), githubCard(), ...customs.map(c => customCard(userId, c))]);
-  const embeds = [brief.embed, ...customEmbeds.map(x => x?.embed), weather, gh, remindersCard(userId), memoryCard(userId)]
+  const embeds = [brief.embed, ...customEmbeds.map(x => x?.embed), specialtiesCard(userId), weather, gh, remindersCard(userId), memoryCard(userId)]
     .filter(Boolean).slice(0, 10);
   const newProj = new ButtonBuilder().setCustomId('home_newproj').setLabel('プロジェクト作成').setEmoji('📁').setStyle(ButtonStyle.Primary);
   const region = new ButtonBuilder().setCustomId('home_region').setLabel('地域').setEmoji('📍').setStyle(ButtonStyle.Secondary);

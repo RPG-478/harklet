@@ -14,7 +14,8 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | --- | --- |
 | Chat with memory | `/ask` + per-user long-term memory (SQLite). Key facts are auto-extracted from conversation |
 | Action Buttons | Replies carry executable buttons, and direct requests are done on the spot: add/delete Home cards, reminders, memories, projects, region, briefing, model |
-| Proactive assistance | Ask in chat for reminders and a daily morning briefing |
+| Proactive assistance | Daily briefing plus a DM suggestion when a repeatable Specialty is due; browser work starts only after you ask or press its action button |
+| Specialties | Teach a repeatable workflow in chat, or let Harklet learn after the same browser task completes twice. Ask for it again by name; optional repeat interval |
 | Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
 | Panels | Home cards are Hark-style panels: the agent can build cards that pull live data from connected services and carry their own action buttons. Reply to the Home message to redesign them in chat |
 | Projects | Ask in chat or use the Projects button to create a topic-scoped thread |
@@ -22,6 +23,8 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | Live screen | A read-only noVNC link is sent by DM when browser work starts. With cloudflared installed, it opens over HTTPS from a phone or another network. |
 
 External services connect per user with OAuth — `/service connect` or just ask in chat. **Google Workspace** (Gmail unread, Calendar today) uses a loopback auth URL; **Microsoft 365** (Outlook unread, Calendar today) uses the device code flow so you can approve from a phone. Refresh tokens live in the same AES-256-GCM vault as browser logins (`HARKLET_SECRET_KEY`). Once connected, the agent can read those services on request and Home panels can display them. GitHub is reachable only as a website in the agent browser; the GitHub Home card uses a separate token for read-only summaries.
+
+Specialties keep a short description of the workflow, not a replayable script. Browser-derived steps omit typed values, verification codes, coordinates, and URL queries. You can say “remember this workflow”, “run it again”, “show my Specialties”, or “forget this Specialty”. Repeat interval suggestions are sent only when the daily briefing is enabled; they do not run the task automatically.
 
 For testing, set `DISCORD_GUILD_ID` and `HARKLET_ENABLE_RESET=1` when registering commands and starting the bot. `/reset` is limited to server administrators. It shows a confirmation button before deleting Harklet's managed category, its child channels, tracked project threads, and all data in Harklet's database, including saved login values. Saved browser VM cookies remain.
 
