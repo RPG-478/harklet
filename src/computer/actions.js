@@ -87,7 +87,7 @@ export function parseAction(raw, { width, height, elementCount = 0 }) {
     case 'share_auth_qr':
       return good({ action: t, message: String(raw.message ?? '認証用QRコードを確認してください').slice(0, 300) });
     case 'done':
-      return good({ action: t, summary: String(raw.summary ?? '').slice(0, 500) });
+      return good({ action: t, summary: String(raw.summary ?? '').slice(0, 500), remember: raw.remember === true });
     case 'fail':
       return good({ action: t, reason: String(raw.reason ?? '').slice(0, 500) });
     default:

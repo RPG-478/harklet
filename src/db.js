@@ -169,7 +169,7 @@ const q = {
     ORDER BY sp.last_run_at LIMIT 20`),
   saveObservation: db.prepare(`INSERT INTO workflow_observations (user_id, task_key, task, instructions, updated_at)
     VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, task_key) DO UPDATE SET
-    instructions=excluded.instructions, successes=successes+1, updated_at=excluded.updated_at`),
+    instructions=excluded.instructions, updated_at=excluded.updated_at`),
   getObservation: db.prepare('SELECT * FROM workflow_observations WHERE user_id = ? AND task_key = ?'),
   latestObservation: db.prepare('SELECT * FROM workflow_observations WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1'),
 };
