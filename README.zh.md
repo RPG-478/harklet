@@ -91,6 +91,7 @@ npm start
 - `src/schedule.js` —— 自然语言时间解析器
 - `src/computer/*` —— Agent浏览器栈：Quicksand VM 控制、视觉循环、登录模态框、AES-256-GCM 密钥保管库、带认证的 noVNC 查看器（可选 Cloudflare 隧道）；VM 由 `sidecar/quicksand_session.py` 驱动
 - `src/connect/*` —— OAuth 服务连接器：Google Workspace（回环 URL + 模态框）与 Microsoft 365（设备码流程），刷新令牌存入加密保险库，可从聊天或 Home 面板注入数据
+- `src/specialties.js` —— 可重复任务（Specialty）的提示：从已完成的浏览器任务中提取安全的步骤摘要，Agent 判断可复用时保存，并计算重复间隔的到期时间
 
 ## 注意
 

@@ -93,6 +93,7 @@ Three provider styles are supported; the active one is auto-detected from which 
 - `src/schedule.js` — natural-language-ish time parser
 - `src/computer/*` — agent browser stack: Quicksand VM control, vision loop, login-handoff modals, AES-256-GCM secret vault, authenticated noVNC viewer (+ optional Cloudflare tunnel); the VM is driven by `sidecar/quicksand_session.py`
 - `src/connect/*` — OAuth service connectors: Google Workspace (loopback URL + modal) and Microsoft 365 (device code flow), refresh tokens in the encrypted vault, provider ops callable from chat or injected into Home panels
+- `src/specialties.js` — repeatable workflow hints (Specialties): extracts safe step summaries from completed browser work, promotes them when the agent marks a run reusable, and computes repeat-interval due dates
 
 ## Notes
 

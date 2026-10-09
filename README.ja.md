@@ -94,6 +94,7 @@ npm start
 - `src/schedule.js` — 自然言語ふう時刻パーサ
 - `src/computer/*` — Agentブラウザ基盤。Quicksand VM制御・視覚ループ・ログイン用モーダル・AES-256-GCMシークレット保管・認証付きnoVNCビューア(+任意でCloudflareトンネル)。VMは `sidecar/quicksand_session.py` が駆動
 - `src/connect/*` — OAuthサービスコネクタ。Google Workspace(ループバックURL+モーダル)とMicrosoft 365(デバイスコード)。リフレッシュトークンは暗号化保管庫へ。チャット実行とHomeパネルのデータ注入の両方から使える
+- `src/specialties.js` — 繰り返し作業(Specialty)のヒント。完了したブラウザ作業から安全な手順の要点を抽出し、Agentが再利用価値ありと判断したものを保存。再実行間隔の期限判定も担当
 
 ## 注意
 
