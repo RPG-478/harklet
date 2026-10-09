@@ -16,7 +16,7 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | Action Buttons | Replies carry executable buttons, and direct requests are done on the spot: add/delete Home cards, reminders, memories, projects, region, briefing, model |
 | Proactive assistance | Daily briefing plus a DM suggestion when a repeatable Specialty is due; browser work starts only after you ask or press its action button |
 | Specialties | Teach a repeatable workflow in chat, or let the computer agent remember a useful workflow when it finishes. Ask for it again by name; optional repeat interval |
-| Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
+| Home | `/start` places a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min; reply to it or ask in chat to manage cards |
 | Panels | Home cards are Hark-style panels: the agent can build cards that pull live data from connected services and carry their own action buttons. Reply to the Home message to redesign them in chat |
 | Projects | Ask in chat or use the Projects button to create a topic-scoped thread |
 | Agent browser | Ask in chat for Web work; Harklet starts a per-user Quicksand Linux VM and reports the result. `/stop` saves and closes it; [setup and limits](docs/browser-agent.md) |
@@ -68,7 +68,6 @@ For everyday use, write in the chat channel created by `/start`, DM Harklet, or 
 | `/model` | Search and page through models available to the configured API key, then apply model and effort per user |
 | `/main set|off|show` | Set an existing channel as the main chat, disable it, or show it. `set` does not create channels |
 | `/memory list|forget|clear` | List / delete memories |
-| `/home open|cards|off` | Place/manage custom cards/remove the Home dashboard (auto-refresh every 30 min). AI can offer an Add to Home button that creates dynamic cards |
 | `/stop` | Stop browser work and save the VM |
 | `/service list|connect|disconnect` | Manage per-user OAuth connections to Google Workspace / Microsoft 365 (also available by asking in chat) |
 

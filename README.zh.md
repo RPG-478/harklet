@@ -18,7 +18,7 @@ Chat browser work uses a dedicated Quicksand Linux VM and does not require Docke
 | 操作按钮 | AI回复附带可执行按钮；直接下达"删除""创建"等指令时Agent立即执行（主页卡片/提醒/记忆/项目/地区/简报/模型） |
 | 主动协助 | 提醒、每日晨间简报，以及重复任务到期时的私信建议；浏览器任务仍需用户请求或点击按钮 |
 | Specialties | 在聊天中教助手重复任务的步骤；浏览器任务完成时，Agent 会判断其复用价值并记住，可按名称再次执行 |
-| Home | `/home` —— 常驻仪表盘消息：今日行动、天气、GitHub 概要、提醒、记忆卡片，每 30 分钟自动刷新 |
+| Home | `/start` 会放置一条常驻仪表盘消息：今日行动、天气、GitHub 概要、提醒、记忆卡片，每 30 分钟自动刷新；回复该消息或在聊天中要求即可管理卡片 |
 | Projects | 在聊天中请求创建项目子区，或使用 Projects 按钮 |
 | Agent浏览器 | 在聊天中请求网页操作；Harklet 启动每用户专用 Quicksand Linux VM 并汇报结果。`/stop` 保存并关闭；[设置与限制](docs/browser-agent.md) |
 | 实时画面 | 浏览器任务开始时通过私信发送只读 noVNC 链接。安装 cloudflared 后可通过 HTTPS 在手机或其他网络查看 |
@@ -66,7 +66,6 @@ npm start
 | `/model` | 从当前 API 密钥可用模型中搜索或翻页，选择模型与推理强度后确认 |
 | `/main set|off|show` | 将已有频道设为主聊天频道、关闭或查看；`set` 不创建频道 |
 | `/memory list|forget|clear` | 查看 / 删除记忆 |
-| `/home open|cards|off` | 放置/管理自定义卡片/移除 Home（每 30 分钟自动刷新，附刷新按钮）。AI 可提议“添加到主页”生成动态卡片 |
 | `/stop` | 停止浏览器任务并保存虚拟机 |
 | `/service list|connect|disconnect` | 管理每用户对 Google Workspace / Microsoft 365 的 OAuth 连接（也可在聊天中直接要求） |
 

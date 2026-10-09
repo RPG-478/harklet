@@ -296,6 +296,10 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
     await homeRefresh();
     return `🗑️ Homeからカード「${hit.title}」を削除しました`;
   }
+  if (a.kind === "home_off") {
+    store.clearHome(userId);
+    return '🏠 Homeを解除しました(自動更新を停止。メッセージ自体は残ります)';
+  }
   if (a.kind === "project") {
     const topic = String(arg ?? a.label).slice(0, 90);
     if (!channel?.threads || channel.type !== ChannelType.GuildText) {
@@ -565,39 +569,6 @@ const handlers = {
 
   panel: (i) => handlers.project(i),
 
-  async home(i) {
-    const sub = i.options.getSubcommand();
-    if (sub === 'cards') {
-      const cards = store.listHomeCards(i.user.id);
-      if (!cards.length) {
-        return i.reply({ content: 'カスタムカードはまだありません。会話で提案された「ホームに追加」ボタンから増えます', flags: MessageFlags.Ephemeral });
-      }
-      const lines = cards.map(c => `#${c.id} ${c.emoji ?? ''} ${c.title}`);
-      const rows = cards.slice(0, 5).map(c => new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`hcard_del:${c.id}`).setLabel(`削除: ${c.title.slice(0, 30)}`).setStyle(ButtonStyle.Danger),
-      ));
-      return i.reply({ content: '🏠 カスタムカード\n' + lines.join('\n'), components: rows, flags: MessageFlags.Ephemeral });
-    }
-    if (sub === 'off') {
-      store.clearHome(i.user.id);
-      return i.reply({ content: '🏠 Homeを解除しました(自動更新を停止)', flags: MessageFlags.Ephemeral });
-    }
-    await i.deferReply({ flags: MessageFlags.Ephemeral });
-    const payload = await homePayload(i.user.id, actionRows);
-    const prev = store.getSettings(i.user.id);
-    if (prev?.home_message_id) {
-      try {
-        const ch = await client.channels.fetch(prev.home_channel_id);
-        const m = await ch.messages.fetch(prev.home_message_id);
-        await m.edit(payload);
-        return i.editReply('🏠 Homeを更新しました');
-      } catch { /* 消えていた等→新規投稿へ */ }
-    }
-    const msg = await i.channel.send(payload);
-    store.setHome(i.user.id, i.channelId, msg.id);
-    return i.editReply('🏠 Homeを設置しました。30分ごとに自動更新・「更新」ボタンで即時更新できます');
-  },
-
   async service(i) {
     const sub = i.options.getSubcommand();
     if (sub === 'list') {
@@ -823,18 +794,6 @@ client.on('interactionCreate', async (interaction) => {
     } else if (interaction.isButton() && interaction.customId === 'home_refresh') {
       await interaction.deferUpdate();
       try { await interaction.message.edit(await homePayload(interaction.user.id, actionRows)); } catch {}
-    } else if (interaction.isButton() && interaction.customId.startsWith('hcard_del:')) {
-      const id = Number(interaction.customId.slice(10));
-      const ok = store.delHomeCard(interaction.user.id, id);
-      await interaction.update({ content: ok ? `🗑️ カード #${id} を削除しました` : "見つかりません", components: [] });
-      const st = store.getSettings(interaction.user.id);
-      if (st?.home_message_id) {
-        try {
-          const ch = await client.channels.fetch(st.home_channel_id);
-          const m = await ch.messages.fetch(st.home_message_id);
-          await m.edit(await homePayload(interaction.user.id, actionRows));
-        } catch {}
-      }
     } else if (interaction.isButton() && interaction.customId === 'proj_new') {
       const modal = new ModalBuilder().setCustomId('proj_modal').setTitle('プロジェクト作成');
       modal.addComponents(new ActionRowBuilder().addComponents(

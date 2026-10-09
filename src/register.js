@@ -19,11 +19,6 @@ const commands = [
     .addSubcommand(s => s.setName('forget').setDescription('記憶を削除')
       .addIntegerOption(o => o.setName('id').setDescription('削除する記憶のID').setRequired(true)))
     .addSubcommand(s => s.setName('clear').setDescription('全記憶を削除')),
-  new SlashCommandBuilder().setName('home')
-    .setDescription('Harklet Home: 興味ある情報をカードで常駐表示(自動更新)')
-    .addSubcommand(s => s.setName('open').setDescription('Homeを設置/更新'))
-    .addSubcommand(s => s.setName('cards').setDescription('カスタムカードの一覧・削除'))
-    .addSubcommand(s => s.setName('off').setDescription('Homeを解除(自動更新停止)')),
   new SlashCommandBuilder().setName('stop')
     .setDescription('Agentのブラウザ作業を止めて画面を保存する'),
   new SlashCommandBuilder().setName('service')
