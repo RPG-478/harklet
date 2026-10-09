@@ -4,7 +4,7 @@ import { vault, vaultReady } from './vault.js';
 import { browser } from './browser.js';
 import { makeDecider } from './vision.js';
 import { runComputerTask } from './loop.js';
-import { secretRequestPayload, secretModal, authMethodPayload, authQrPayload } from './ui.js';
+import { secretRequestPayload, secretModal, authMethodPayload, authQrPayload, humanCheckPayload } from './ui.js';
 import { retrying, retryingBrowser } from './retry.js';
 import { SessionSecrets } from './session-secrets.js';
 
@@ -49,6 +49,10 @@ export async function handleComputerInteraction(interaction) {
   }
   if (interaction.isButton() && interaction.customId.startsWith('cu_qr:')) {
     await guard(interaction, () => handleQrContinue(interaction));
+    return true;
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('cu_human:')) {
+    await guard(interaction, () => handleHumanDone(interaction));
     return true;
   }
   return false;
@@ -129,6 +133,7 @@ async function runTask(userId, s, task, abort, channel, post, onDone) {
       requestSecrets: ({ message, fields }) => requestSecrets(userId, s.id, channel, message, fields),
       chooseAuthMethod: ({ message, options }) => chooseAuthMethod(userId, s.id, channel, message, options),
       shareAuthQr: ({ png, message }) => shareAuthQr(userId, channel, png, message),
+      requestHuman: ({ message }) => requestHuman(userId, s.id, channel, message),
       progress: post,
       signal: abort.signal,
     });
@@ -268,6 +273,50 @@ async function handleQrContinue(interaction) {
   const reqId = interaction.customId.slice('cu_qr:'.length);
   const req = pending.get(reqId);
   if (!req || req.kind !== 'qr') throw new Error('この確認は期限切れか、すでに完了しています');
+  if (req.userId !== interaction.user.id) throw new Error('この確認は依頼した本人だけができます');
+  clearTimeout(req.timer);
+  pending.delete(reqId);
+  req.resolve(true);
+  await interaction.reply({ content: '確認しました。Agentが作業を続けます。', flags: EPHEMERAL });
+}
+
+// The agent hit a human-only check (hCaptcha etc.). The owner solves it in the
+// interactive viewer, then presses the button so the run can continue.
+async function requestHuman(userId, sessionId, channel, message) {
+  let viewer = null;
+  try { viewer = browser.viewerUrl(sessionId); } catch { return 'unavailable'; }
+  const interactive = browser.viewerIsInteractive(sessionId);
+  if (!interactive) {
+    await channel?.send('🧩 人間確認（CAPTCHA等）が出ていますが、このBotのビューアは閲覧専用です。' +
+      '操作できるようにするには管理者が HARKLET_VIEWER_INTERACTIVE=1 を設定してください。').catch(() => {});
+    return 'unavailable';
+  }
+  if (viewer) {
+    try {
+      const user = await channel?.client?.users?.fetch(userId);
+      await user?.send('🧩 人間確認を解いてください: ' + viewer +
+        '\n画面でクリック・入力できます。終わったら元のチャンネルの「解決した」ボタンを押してください。');
+    } catch {}
+  }
+  const reqId = Date.now().toString(36) + '-' + (++seq).toString(36);
+  try {
+    return await new Promise(resolve => {
+      if (!channel) { resolve(null); return; }
+      const timer = setTimeout(() => { pending.delete(reqId); resolve(null); }, REQUEST_TIMEOUT_MS);
+      pending.set(reqId, { userId, timer, resolve, kind: 'human' });
+      Promise.resolve(channel.send(humanCheckPayload(reqId, message, !!viewer))).catch(() => {
+        clearTimeout(timer); pending.delete(reqId); resolve(null);
+      });
+    });
+  } finally {
+    // session may have ended while waiting; ignore
+  }
+}
+
+async function handleHumanDone(interaction) {
+  const reqId = interaction.customId.slice('cu_human:'.length);
+  const req = pending.get(reqId);
+  if (!req || req.kind !== 'human') throw new Error('この確認は期限切れか、すでに完了しています');
   if (req.userId !== interaction.user.id) throw new Error('この確認は依頼した本人だけができます');
   clearTimeout(req.timer);
   pending.delete(reqId);

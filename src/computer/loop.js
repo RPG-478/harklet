@@ -64,7 +64,7 @@ function describe(a) {
 // never passed to decide(), never put in history and never returned in the result.
 export async function runComputerTask(opts) {
   const {
-    userId, task, sessionId, browser, vault, decide, requestSecrets, chooseAuthMethod, shareAuthQr, progress,
+    userId, task, sessionId, browser, vault, decide, requestSecrets, chooseAuthMethod, shareAuthQr, requestHuman, progress,
     signal, maxSteps = 25, deadlineMs = 15 * 60 * 1000, settleMs = 700,
     sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   } = opts;
@@ -174,6 +174,18 @@ export async function runComputerTask(opts) {
       if (!shared) return { status: 'failed', reason: '認証画面のDM確認ができませんでした', steps: step };
       note(step + '. 認証画面を本人のDiscord DMで確認しました。画面の変化を確認してください');
       rememberStep('認証用の画面を本人に確認');
+    } else if (a.action === 'request_human') {
+      const result = await requestHuman?.({ message: a.message });
+      if (result === 'unavailable') {
+        return { status: 'failed', reason: '人間確認が出ましたが、画面ビューアが操作できない設定なので解けませんでした', steps: step };
+      }
+      if (signal?.aborted) return { status: 'stopped' };
+      if (result) {
+        note(step + '. 本人が画面の確認を解決しました。変化を確認してください');
+        rememberStep('画面の人間確認を本人が解決');
+      } else {
+        note(step + '. 人間確認の依頼に回答がありませんでした。画面を再確認してください');
+      }
     } else if (a.action === 'type_secret') {
       try {
         const value = vault.takeSecret ? vault.takeSecret(userId, a.name) : vault.getSecret(userId, a.name);

@@ -12,6 +12,8 @@ const root = resolve(process.env.HARKLET_BROWSER_DATA_DIR || 'browser-data');
 const sessions = new Map();
 const SELECTOR = 'a,button,input,textarea,select,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
 const provider = process.env.HARKLET_BROWSER_PROVIDER || 'quicksand';
+// Opt-in: lets the owner click and type in the viewer to clear captchas.
+const viewerInteractive = process.env.HARKLET_VIEWER_INTERACTIVE === '1';
 
 async function freePort() {
   const server = createServer();
@@ -21,12 +23,12 @@ async function freePort() {
   return port;
 }
 
-function startVm(userHash, port, viewerPort) {
+function startVm(userHash, port, viewerPort, interactive) {
   return new Promise((resolveStart, rejectStart) => {
     const venvPython = resolve('sidecar', '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
     const python = process.env.HARKLET_PYTHON || (existsSync(venvPython) ? venvPython : (process.platform === 'win32' ? 'py' : 'python3'));
     const script = resolve('sidecar/quicksand_session.py');
-    const child = spawn(python, ['-u', script, userHash, String(port), root, String(viewerPort)], {
+    const child = spawn(python, ['-u', script, userHash, String(port), root, String(viewerPort), interactive ? '1' : '0'], {
       cwd: resolve(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
     });
     let settled = false;
@@ -112,7 +114,7 @@ async function createSession(userId) {
     if (provider === 'quicksand') {
       const port = await freePort();
       const viewerPort = await freePort();
-      vm = await startVm(userHash, port, viewerPort);
+      vm = await startVm(userHash, port, viewerPort, viewerInteractive);
       try { remote = await connectVm(port); }
       catch (err) { throw new Error(err.message + ' (' + vm.listen + ')'); }
       context = remote.contexts()[0];
@@ -139,10 +141,10 @@ async function createSession(userId) {
     await first.setViewportSize({ width: 1280, height: 800 });
     let viewerTunnel = null;
     if (vm?.viewerReady && process.env.HARKLET_REMOTE_VIEWER !== '0') {
-      try { viewerTunnel = await startRemoteViewer(vm.viewerPort); }
+      try { viewerTunnel = await startRemoteViewer(vm.viewerPort, viewerInteractive); }
       catch (err) { console.warn('Remote viewer unavailable:', err.message); }
     }
-    sessions.set(id, { context, page: first, elements: [], vm, remote, viewerTunnel });
+    sessions.set(id, { context, page: first, elements: [], vm, remote, viewerTunnel, viewerInteractive });
     return { id, width: 1280, height: 800 };
   } catch (err) {
     await remote?.close().catch(() => {});
@@ -280,9 +282,12 @@ function viewerUrl(id) {
   const s = session(id);
   if (s.viewerTunnel) return s.viewerTunnel.url;
   const vm = s.vm;
-  return vm?.viewerReady ? `http://127.0.0.1:${vm.viewerPort}/vnc.html?autoconnect=true&view_only=true&resize=scale` : null;
+  const viewOnly = viewerInteractive ? '' : '&view_only=true';
+  return vm?.viewerReady ? 'http://127.0.0.1:' + vm.viewerPort + '/vnc.html?autoconnect=true' + viewOnly + '&resize=scale' : null;
 }
 
 function remoteViewer(id) { return !!session(id).viewerTunnel; }
 
-export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl, remoteViewer, showDiscordPrompt };
+function viewerIsInteractive(id) { return !!session(id).viewerInteractive; }
+
+export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl, remoteViewer, viewerIsInteractive, showDiscordPrompt };

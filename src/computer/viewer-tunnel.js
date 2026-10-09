@@ -11,7 +11,7 @@ function equalSecret(a, b) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-export async function startViewerGateway(viewerPort) {
+export async function startViewerGateway(viewerPort, interactive) {
   const token = randomBytes(32).toString('base64url');
   const sockets = new Set();
   const authorized = req => {
@@ -50,7 +50,7 @@ export async function startViewerGateway(viewerPort) {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/open' && equalSecret(url.searchParams.get('key'), token)) {
       res.writeHead(302, {
-        location: '/vnc.html?autoconnect=true&view_only=true&resize=scale',
+        location: '/vnc.html?autoconnect=true' + (interactive ? '' : '&view_only=true') + '&resize=scale',
         'set-cookie': `${COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/`,
         'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
       });
@@ -103,8 +103,8 @@ export async function startViewerGateway(viewerPort) {
   };
 }
 
-export async function startRemoteViewer(viewerPort) {
-  const gateway = await startViewerGateway(viewerPort);
+export async function startRemoteViewer(viewerPort, interactive) {
+  const gateway = await startViewerGateway(viewerPort, interactive);
   const command = process.env.HARKLET_CLOUDFLARED || 'cloudflared';
   const child = spawn(command, ['--no-autoupdate', 'tunnel', '--url', `http://127.0.0.1:${gateway.port}`],
     { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });

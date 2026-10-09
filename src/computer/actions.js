@@ -2,7 +2,8 @@ import { isSecretName, isOneTimeSecretField } from './names.js';
 
 const KEY_RE = /^[a-zA-Z0-9_+]{1,20}$/;
 const TYPES = new Set(['click', 'double_click', 'right_click', 'move', 'scroll', 'type', 'type_secret',
-  'click_element', 'navigate', 'key', 'wait', 'request_secrets', 'choose_auth_method', 'share_auth_qr', 'done', 'fail']);
+  'click_element', 'navigate', 'key', 'wait', 'request_secrets', 'choose_auth_method', 'share_auth_qr',
+  'request_human', 'done', 'fail']);
 
 const bad = error => ({ ok: false, error });
 const good = action => ({ ok: true, action });
@@ -86,6 +87,8 @@ export function parseAction(raw, { width, height, elementCount = 0 }) {
     }
     case 'share_auth_qr':
       return good({ action: t, message: String(raw.message ?? '認証用QRコードを確認してください').slice(0, 300) });
+    case 'request_human':
+      return good({ action: t, message: String(raw.message ?? '画面の確認を解いてください').slice(0, 300) });
     case 'done':
       return good({ action: t, summary: String(raw.summary ?? '').slice(0, 500), remember: raw.remember === true });
     case 'fail':

@@ -54,3 +54,16 @@ export function authQrPayload(reqId, png, message) {
     new ButtonBuilder().setCustomId('cu_qr:' + reqId).setLabel('確認して続ける').setStyle(ButtonStyle.Primary));
   return { embeds: [embed], components: [row], files: [new AttachmentBuilder(png, { name: 'harklet-auth.png' })] };
 }
+
+// A human-only check (hCaptcha etc.) appeared on the page. The viewer link is
+// private, so it is sent by DM; only the requester can press the button.
+export function humanCheckPayload(reqId, message, hasViewer) {
+  const embed = new EmbedBuilder()
+    .setTitle('🧩 人間確認が出ています')
+    .setDescription(message + (hasViewer ? '\n画面リンクはDMに送りました。' : ''))
+    .setColor(0xfaa61a)
+    .setFooter({ text: '依頼した本人だけが押せます' });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('cu_human:' + reqId).setLabel('解決した').setStyle(ButtonStyle.Primary));
+  return { embeds: [embed], components: [row] };
+}

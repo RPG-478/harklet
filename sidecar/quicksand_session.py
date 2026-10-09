@@ -15,6 +15,7 @@ from quicksand_cua import CuaSandbox
 async def main():
     name, port, data_dir = sys.argv[1], int(sys.argv[2]), Path(sys.argv[3])
     viewer_port = int(sys.argv[4]) if len(sys.argv) > 4 else None
+    viewer_interactive = len(sys.argv) > 5 and sys.argv[5] == "1"
     saves = data_dir / "quicksand" / "sandboxes"
     saves.mkdir(parents=True, exist_ok=True)
     pointers = data_dir / "quicksand" / "users"
@@ -59,11 +60,13 @@ async def main():
             raise RuntimeError(f"CDP relay failed: {relay.stderr}")
         viewer_ready = False
         if viewer_port:
-            # The bundled noVNC has no authentication. Enforce read-only at the
-            # VNC server and expose it only through QEMU's loopback host forward.
+            # The bundled noVNC has no authentication. Pin the service flags and
+            # expose it only through QEMU's loopback host forward. Interactive
+            # mode lets the owner solve captchas from the viewer.
+            mode_flag = "" if viewer_interactive else " -viewonly"
             override = await vm.execute("mkdir -p /run/systemd/system/x11vnc.service.d && "
                 "printf '[Service]\\nExecStart=\\nExecStart=/usr/bin/x11vnc -display :0 "
-                "-rfbport 5901 -forever -shared -nopw -localhost -viewonly\\n' "
+                "-rfbport 5901 -forever -shared -nopw -localhost" + mode_flag + "\\n' "
                 "> /run/systemd/system/x11vnc.service.d/harklet.conf && "
                 "systemctl daemon-reload && systemctl restart x11vnc.service novnc.service")
             if override.exit_code == 0:
@@ -73,7 +76,8 @@ async def main():
                     for _ in range(20):
                         probe = await vm.execute("curl -fsS --max-time 2 http://127.0.0.1:6080/vnc.html >/dev/null")
                         vnc = await vm.execute("ss -ltn | grep -q ':5901 ' && "
-                            "ps -C x11vnc -o args= | grep -q -- '-viewonly'")
+                            "ps -C x11vnc -o args= | grep -q -- '" +
+                            ("-rfbport 5901" if viewer_interactive else "-viewonly") + "'")
                         if probe.exit_code == 0 and vnc.exit_code == 0:
                             viewer_ready = True
                             break
