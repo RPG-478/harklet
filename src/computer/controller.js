@@ -108,8 +108,9 @@ export async function startComputerTask({ userId, task, channel, post: customPos
 
 async function runTask(userId, s, task, abort, channel, post, onDone) {
   let outcome;
+  let result;
   try {
-    const result = await runComputerTask({
+    result = await runComputerTask({
       userId,
       task,
       sessionId: s.id,
@@ -138,7 +139,7 @@ async function runTask(userId, s, task, abort, channel, post, onDone) {
     running.delete(userId);
     bumpIdle(userId);
   }
-  try { await onDone?.(outcome); } catch (err) { console.error('computer outcome callback failed:', err); }
+  try { await onDone?.(outcome, result); } catch (err) { console.error('computer outcome callback failed:', err); }
   await post(outcome);
 }
 

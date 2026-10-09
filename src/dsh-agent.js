@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { store } from './db.js';
 import { ensureLoginHandoff } from './computer/login-intent.js';
+import { specialtyDue } from './specialties.js';
 
 const EFFORT_BUDGET = { low: 1024, medium: 4096, high: 16384 };
 const REPLY_TIMEOUT_MS = 120_000;
@@ -36,11 +37,16 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
   - "{\"kind\":\"location\",\"arg\":\"都市名\",\"auto\":true}" … Home天気の地域を設定
   - "{\"kind\":\"brief\",\"arg\":\"{\\"time\\":\\"07:30\\"}\"または\"{\\"off\\":true}\",\"auto\":true}" … 毎朝のブリーフ
   - "{\"kind\":\"model\",\"arg\":\"{\\"model\\":\\"プロバイダ/モデル\\",\\"effort\\":\\"low|medium|high|default\\"}\",\"auto\":true}" … モデル・effort変更
+  - Specialty保存: {"kind":"specialty_save","arg":"JSON文字列 {name, instructions, interval_days?}","auto":true}。ユーザーが会話で作業のやり方を教えたら、その手順を保存。直前に成功したブラウザ作業を「覚えて」と頼まれた時は arg を "last" にする。直前の作業に繰り返し間隔も付ける時は arg を JSON文字列 {"from_last":true,"interval_days":7} にする。interval_daysは希望がある時だけ1〜365。ログイン情報・コードを手順へ書かない。成功した同じブラウザ作業が繰り返された場合も自動で覚える。
+  - Specialty再実行: {"kind":"specialty_run","arg":"登録済みID","auto":true}。ユーザーが覚えた作業を再度頼んだ時は、登録済みIDを使う。
+  - Specialty一覧: {"kind":"specialty_list","auto":true}。覚えた作業を見せる。
+  - Specialty削除: {"kind":"specialty_del","arg":"登録済みID","auto":true}。頼まれた作業を忘れる。
   - Computer Use: {"kind":"computer","arg":"ブラウザで行う具体的な作業","auto":true}。Web閲覧、Webサイトへのログイン、ログイン後の作業を頼まれたときに使う。日常会話には使わない。
   「Discordにログイン」「Gmailにログイン」のような短い依頼も、専用VMのブラウザで該当サイトを開いてログインを試す依頼として扱う。Discordアプリやユーザーの端末そのものを操作する意味にはしない。
   ログイン情報が必要ならComputer Use側がDiscordの入力モーダルを本人に出し、保存した値をブラウザへ入力できる。「自分でブラウザを開いてログインしてください」と返して終わらない。モーダルを出す前にチャット本文でID・パスワードを要求しない。
   Computer Useは非同期。開始時点で完了したと報告しない。完了結果は別途通知される。GmailやGitHubの専用API接続は未実装で、専用ブラウザで開けるWebサイトだけを操作できる。
   提案ボタンとして出すとき(autoなし)は、押す価値のあるものだけ。不要なら空配列。
+  先回りの提案は実際の記憶・予定・Specialtyに根拠がある時だけ。外部サービスを監視していると装わない。頼まれていないブラウザ作業は勝手に始めず、提案ボタンにする。
 - remember: 会話から得た、今後も覚える価値のあるユーザーの事実(名前・好み・予定・進捗)。0〜2件。なければ空配列。
 - reply の中では上記のDiscord記法だけを使い、JSON構造は壊すな。`;
 
@@ -251,12 +257,14 @@ export async function chatDsh(userId, scope, userText) {
   const agent = await agentFor(userId, scope);
   const memories = store.listMemories(userId);
   const cards = store.listHomeCards(userId);
+  const specialties = store.listSpecialties(userId);
   const city = (store.getSettings(userId) ?? {}).home_city;
   const outcomes = computerOutcomes.get(scope) ?? [];
   const ctxBlock = [
     outcomes.length ? '【前回以降のブラウザ作業結果】\n' + outcomes.join('\n') : '',
     memories.length ? '【このユーザーについて覚えていること】\n' + memories.map(m => '- ' + m.content).join('\n') : '',
     cards.length ? '【ユーザーのHomeに出ているカード】\n' + cards.map(c => '- ' + (c.emoji ? c.emoji + ' ' : '') + c.title + '（内容指示: ' + String(c.prompt).slice(0, 80) + '）').join('\n') : '',
+    specialties.length ? '【覚えた繰り返し作業】\n' + specialties.map(s => `- ID ${s.id}: ${s.name}${specialtyDue(s) ? '（再実行の時期）' : ''}`).join('\n') : '',
     city ? '【ユーザーの地域】' + city + '（Homeの天気カードはこの地域）' : '',
     '【現在日時】' + new Date().toISOString(),
   ].filter(Boolean).join('\n');

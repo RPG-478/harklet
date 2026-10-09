@@ -12,6 +12,7 @@ import { listModels } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
 import { handleComputerInteraction, startComputerTask, computerIsBusy } from './computer/controller.js';
 import { detachedProjectThreads } from './reset-plan.js';
+import { learnCompletedWorkflow, specialtyDefinitionFromArg, specialtyTask } from './specialties.js';
 
 function makeClient(withContent) {
   const intents = [
@@ -170,7 +171,51 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
     if (!target?.send) return 'ブラウザ作業の結果を通知できるチャンネルがありません';
     return startComputerTask({
       userId, task, channel: target,
-      onDone: outcome => { if (scope) recordComputerOutcome(userId, scope, task, outcome); },
+      onDone: async (outcome, result) => {
+        if (scope) recordComputerOutcome(userId, scope, task, outcome);
+        const learned = learnCompletedWorkflow(store, userId, task, result);
+        if (learned?.promoted) {
+          try {
+            const user = await client.users.fetch(userId);
+            await user.send(`🔁 「${learned.candidate.name}」を繰り返す作業として覚えました。次から「もう一度やって」で呼び出せます。手順は入力値や認証コードを含めず、毎回画面を確認します。`);
+          } catch {}
+        }
+      },
+    });
+  }
+
+  if (a.kind === 'specialty_save') {
+    const definition = specialtyDefinitionFromArg(store, userId, arg);
+    if (!definition) return 'Specialtyの名前と手順を指定してください';
+    store.saveSpecialty(userId, definition.name, definition.instructions, definition.interval_days);
+    await homeRefresh();
+    return `🔁 Specialty「${definition.name}」を覚えました${definition.interval_days ? `。${definition.interval_days}日後に再実行を提案します` : ''}`;
+  }
+  if (a.kind === 'specialty_list') {
+    const list = store.listSpecialties(userId);
+    return list.length ? '🔁 覚えている作業:\n' + list.map(s => `#${s.id} ${s.name}${s.interval_days ? ` (${s.interval_days}日ごとに提案)` : ''}`).join('\n').slice(0, 1700)
+      : '覚えているSpecialtyはありません。チャットでやり方を教えて「この手順を覚えて」と頼めます';
+  }
+  if (a.kind === 'specialty_del') {
+    const key = String(arg ?? '').trim();
+    const hit = /^\d+$/.test(key) ? store.getSpecialty(userId, Number(key)) : store.findSpecialty(userId, key);
+    if (!hit) return 'そのSpecialtyは見つかりませんでした';
+    store.deleteSpecialty(userId, hit.id);
+    await homeRefresh();
+    return `🗑️ Specialty「${hit.name}」を削除しました`;
+  }
+  if (a.kind === 'specialty_run') {
+    const key = String(arg ?? '').trim();
+    const hit = /^\d+$/.test(key) ? store.getSpecialty(userId, Number(key)) : store.findSpecialty(userId, key);
+    if (!hit) return 'そのSpecialtyは見つかりませんでした';
+    if (privateComputer && !computerChannel) return 'DMを開けなかったため、非公開のブラウザ作業を開始できませんでした';
+    const target = computerChannel ?? channel;
+    if (!target?.send) return 'ブラウザ作業の結果を通知できるチャンネルがありません';
+    return startComputerTask({ userId, task: specialtyTask(hit), channel: target,
+      onDone: (outcome, result) => {
+        if (scope) recordComputerOutcome(userId, scope, hit.name, outcome);
+        if (result?.status === 'done') store.markSpecialtyRun(userId, hit.id);
+      },
     });
   }
 
@@ -254,7 +299,7 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
 }
 
 async function runAction(interaction, action) {
-  if (action?.kind === 'computer') await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  if (['computer', 'specialty_run'].includes(action?.kind)) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const result = await execAction({ userId: interaction.user.id, channel: interaction.channel, action, scope: 'u:' + interaction.user.id });
   if (interaction.deferred) return interaction.editReply({ content: result ?? '完了' });
   return interaction.reply({ content: result ?? '完了', flags: MessageFlags.Ephemeral });
@@ -274,8 +319,9 @@ async function answer(interaction) {
       components: actionRows(interaction.user.id, all.filter(a => a?.auto !== true && a?.kind !== 'computer')),
     });
     for (const a of autos) {
-      const computerChannel = a.kind === 'computer' && ephemeral ? await interaction.user.createDM().catch(() => null) : null;
-      const r = await execAction({ userId: interaction.user.id, channel: interaction.channel, action: a, scope, computerChannel, privateComputer: a.kind === 'computer' && ephemeral }).catch(e => "⚠️ " + e.message);
+      const browserAction = ['computer', 'specialty_run'].includes(a.kind);
+      const computerChannel = browserAction && ephemeral ? await interaction.user.createDM().catch(() => null) : null;
+      const r = await execAction({ userId: interaction.user.id, channel: interaction.channel, action: a, scope, computerChannel, privateComputer: browserAction && ephemeral }).catch(e => "⚠️ " + e.message);
       if (r) await interaction.followUp({ content: r, ...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}) }).catch(() => {});
     }
   } catch (e) {
@@ -549,6 +595,24 @@ async function refreshHomes() {
   }
 }
 
+let specialtySuggestionsRunning = false;
+async function sendDueSpecialties() {
+  if (specialtySuggestionsRunning) return;
+  specialtySuggestionsRunning = true;
+  try {
+    for (const specialty of store.dueSpecialties()) {
+      try {
+        const user = await client.users.fetch(specialty.user_id);
+        await user.send({
+          content: `🔁 **${specialty.name}** をそろそろ繰り返す時期です。実行しますか？`,
+          components: actionRows(specialty.user_id, [{ kind: 'specialty_run', arg: String(specialty.id), label: '作業を始める' }]),
+        });
+        store.markSpecialtySuggested(specialty.user_id, specialty.id);
+      } catch (err) { console.warn('specialty suggestion unavailable:', err.message); }
+    }
+  } finally { specialtySuggestionsRunning = false; }
+}
+
 // ---------- events ----------
 
 async function sendAgentReply(message, scope, text = message.content) {
@@ -761,6 +825,8 @@ client.once('clientReady', () => {
   setInterval(deliverReminders, 15_000).unref();
   setInterval(sendBriefs, 30_000).unref();
   setInterval(refreshHomes, 1_800_000).unref();
+  void sendDueSpecialties();
+  setInterval(sendDueSpecialties, 3_600_000).unref();
 });
 
 }

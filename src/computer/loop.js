@@ -70,6 +70,10 @@ export async function runComputerTask(opts) {
   } = opts;
   const started = Date.now();
   const history = [];
+  const stepsTaken = [];
+  const rememberStep = (step) => {
+    if (step && stepsTaken.length < 25) stepsTaken.push(step);
+  };
   const note = line => {
     history.push(line);
     if (history.length > 30) history.splice(0, history.length - 30);
@@ -149,24 +153,27 @@ export async function runComputerTask(opts) {
       continue;
     }
 
-    if (a.action === 'done') return { status: 'done', summary: a.summary, steps: step };
+    if (a.action === 'done') return { status: 'done', summary: a.summary, steps: step, stepsTaken };
     if (a.action === 'fail') return { status: 'failed', reason: a.reason, steps: step };
 
     if (a.action === 'request_secrets') {
       const saved = await requestSecrets({ message: a.message, fields: a.fields });
       if (!saved) return { status: 'credentials_timeout', steps: step };
       note(step + '. ログイン情報を保存 (' + saved.join(', ') + ', 値は非表示)');
+      rememberStep('必要なログイン情報を本人に確認');
     } else if (a.action === 'choose_auth_method') {
       const selected = await chooseAuthMethod?.({ message: a.message, options: a.options });
       if (!selected) return { status: 'credentials_timeout', steps: step };
       const chosen = a.options.find(o => o.id === selected);
       if (!chosen) { note(step + '. 認証方法の選択が無効でした'); continue; }
       note(step + '. 利用者が選んだ認証方法: ' + chosen.label + ' (' + chosen.id + ')。画面上でこの方法を選択してください');
+      rememberStep('利用者が認証方法を選択');
     } else if (a.action === 'share_auth_qr') {
       if (!imageSent) { note(step + '. 画像がないため認証画面を送れませんでした'); continue; }
       const shared = await shareAuthQr?.({ png: Buffer.from(shot.png_base64, 'base64'), message: a.message });
       if (!shared) return { status: 'failed', reason: '認証画面のDM確認ができませんでした', steps: step };
       note(step + '. 認証画面を本人のDiscord DMで確認しました。画面の変化を確認してください');
+      rememberStep('認証用の画面を本人に確認');
     } else if (a.action === 'type_secret') {
       try {
         const value = vault.takeSecret ? vault.takeSecret(userId, a.name) : vault.getSecret(userId, a.name);
@@ -175,6 +182,7 @@ export async function runComputerTask(opts) {
         } else {
           await browser.act(sessionId, { type: 'type', text: value });
           note(step + '. type_secret ' + a.name + ' を入力');
+          rememberStep('保存済みのログイン情報を入力');
         }
       } catch {
         note(step + '. type_secret ' + a.name + ' は失敗');
@@ -186,6 +194,15 @@ export async function runComputerTask(opts) {
       try {
         await browser.act(sessionId, toBridge(a));
         note(step + '. ' + describe(a));
+        if (a.action === 'navigate') rememberStep('サイト ' + new URL(a.url).origin + ' を開く');
+        else if (a.action === 'click_element') {
+          const el = elementList?.elements?.[a.index];
+          const kind = ['button', 'a', 'link'].includes(el?.role) ? 'ボタンかリンク' : '要素';
+          rememberStep(`画面の${kind}を選択`);
+        } else if (['click', 'double_click', 'right_click'].includes(a.action)) rememberStep('画面上の対象を選択');
+        else if (a.action === 'type') rememberStep('通常の入力欄に必要な文字を入力');
+        else if (a.action === 'scroll') rememberStep('画面をスクロール');
+        else if (a.action === 'key') rememberStep('キーボード操作で次へ進む');
       } catch (err) {
         note(step + '. ' + describe(a) + ' は失敗: ' + err.message);
       }

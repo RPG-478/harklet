@@ -69,6 +69,27 @@ CREATE TABLE IF NOT EXISTS managed_categories (
   guild_id TEXT PRIMARY KEY,
   category_id TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS specialties (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  instructions TEXT NOT NULL,
+  interval_days INTEGER,
+  last_run_at INTEGER,
+  last_suggested_at INTEGER,
+  created_at INTEGER NOT NULL,
+  UNIQUE(user_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_specialties_user ON specialties(user_id);
+CREATE TABLE IF NOT EXISTS workflow_observations (
+  user_id TEXT NOT NULL,
+  task_key TEXT NOT NULL,
+  task TEXT NOT NULL,
+  instructions TEXT NOT NULL,
+  successes INTEGER NOT NULL DEFAULT 1,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(user_id, task_key)
+);
 `);
 
 // v2: per-user LLM prefs / v3: home message anchor
@@ -126,6 +147,26 @@ const q = {
   setManagedCategory: db.prepare('INSERT OR REPLACE INTO managed_categories (guild_id, category_id) VALUES (?, ?)'),
   getManagedCategory: db.prepare('SELECT category_id FROM managed_categories WHERE guild_id = ?'),
   allPanels: db.prepare('SELECT thread_id FROM panels'),
+  saveSpecialty: db.prepare(`INSERT INTO specialties (user_id, name, instructions, interval_days, last_run_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, name) DO UPDATE SET
+    instructions=excluded.instructions, interval_days=excluded.interval_days,
+    last_run_at=excluded.last_run_at, last_suggested_at=NULL`),
+  listSpecialties: db.prepare('SELECT * FROM specialties WHERE user_id = ? ORDER BY id DESC LIMIT 30'),
+  getSpecialty: db.prepare('SELECT * FROM specialties WHERE id = ? AND user_id = ?'),
+  findSpecialty: db.prepare('SELECT * FROM specialties WHERE name = ? AND user_id = ?'),
+  deleteSpecialty: db.prepare('DELETE FROM specialties WHERE id = ? AND user_id = ?'),
+  markSpecialtyRun: db.prepare('UPDATE specialties SET last_run_at = ?, last_suggested_at = NULL WHERE id = ? AND user_id = ?'),
+  markSpecialtySuggested: db.prepare('UPDATE specialties SET last_suggested_at = ? WHERE id = ? AND user_id = ?'),
+  dueSpecialties: db.prepare(`SELECT sp.* FROM specialties sp JOIN settings st ON st.user_id = sp.user_id
+    WHERE st.brief_enabled = 1 AND sp.interval_days IS NOT NULL AND sp.last_run_at IS NOT NULL
+      AND sp.last_run_at + sp.interval_days * 86400000 <= ?
+      AND (sp.last_suggested_at IS NULL OR sp.last_suggested_at < sp.last_run_at)
+    ORDER BY sp.last_run_at LIMIT 20`),
+  saveObservation: db.prepare(`INSERT INTO workflow_observations (user_id, task_key, task, instructions, updated_at)
+    VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, task_key) DO UPDATE SET
+    instructions=excluded.instructions, successes=successes+1, updated_at=excluded.updated_at`),
+  getObservation: db.prepare('SELECT * FROM workflow_observations WHERE user_id = ? AND task_key = ?'),
+  latestObservation: db.prepare('SELECT * FROM workflow_observations WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1'),
 };
 
 export const store = {
@@ -174,6 +215,20 @@ export const store = {
   setManagedCategory: (guildId, categoryId) => q.setManagedCategory.run(guildId, categoryId),
   getManagedCategory: (guildId) => q.getManagedCategory.get(guildId)?.category_id ?? null,
   allPanels: () => q.allPanels.all().map(r => r.thread_id),
+  saveSpecialty: (userId, name, instructions, intervalDays, now = Date.now()) =>
+    q.saveSpecialty.run(userId, name, instructions, intervalDays, now, now),
+  listSpecialties: (userId) => q.listSpecialties.all(userId),
+  getSpecialty: (userId, id) => q.getSpecialty.get(id, userId) ?? null,
+  findSpecialty: (userId, name) => q.findSpecialty.get(name, userId) ?? null,
+  deleteSpecialty: (userId, id) => q.deleteSpecialty.run(id, userId).changes > 0,
+  markSpecialtyRun: (userId, id, now = Date.now()) => q.markSpecialtyRun.run(now, id, userId),
+  markSpecialtySuggested: (userId, id, now = Date.now()) => q.markSpecialtySuggested.run(now, id, userId),
+  dueSpecialties: (now = Date.now()) => q.dueSpecialties.all(now),
+  saveObservation: (userId, taskKey, task, instructions, now = Date.now()) => {
+    q.saveObservation.run(userId, taskKey, task, instructions, now);
+    return q.getObservation.get(userId, taskKey);
+  },
+  latestObservation: (userId) => q.latestObservation.get(userId) ?? null,
 };
 
 // Keep the schema so the running bot can restart after a test reset.

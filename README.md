@@ -14,13 +14,16 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | --- | --- |
 | Chat with memory | `/ask` + per-user long-term memory (SQLite). Key facts are auto-extracted from conversation |
 | Action Buttons | Replies carry executable buttons, and direct requests are done on the spot: add/delete Home cards, reminders, memories, projects, region, briefing, model |
-| Proactive assistance | Ask in chat for reminders and a daily morning briefing |
+| Proactive assistance | Daily briefing plus a DM suggestion when a repeatable Specialty is due; browser work starts only after you ask or press its action button |
+| Specialties | Teach a repeatable workflow in chat, or let Harklet learn after the same browser task completes twice. Ask for it again by name; optional repeat interval |
 | Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
 | Projects | Ask in chat or use the Projects button to create a topic-scoped thread |
 | Agent browser | Ask in chat for Web work; Harklet starts a per-user Quicksand Linux VM and reports the result. `/stop` saves and closes it; [setup and limits](docs/browser-agent.md) |
 | Live screen | A read-only noVNC link is sent by DM when browser work starts. With cloudflared installed, it opens over HTTPS from a phone or another network. |
 
 Gmail and GitHub are currently reachable only as websites in the agent browser after sign-in. Native account connectors and OAuth are not implemented. The GitHub Home card uses a separate token setting for a summary and does not give the chat agent GitHub API access.
+
+Specialties keep a short description of the workflow, not a replayable script. Browser-derived steps omit typed values, verification codes, coordinates, and URL queries. You can say “remember this workflow”, “run it again”, “show my Specialties”, or “forget this Specialty”. Repeat interval suggestions are sent only when the daily briefing is enabled; they do not run the task automatically.
 
 For testing, set `DISCORD_GUILD_ID` and `HARKLET_ENABLE_RESET=1` when registering commands and starting the bot. `/reset` is limited to server administrators. It shows a confirmation button before deleting Harklet's managed category, its child channels, tracked project threads, and all data in Harklet's database, including saved login values. Saved browser VM cookies remain.
 

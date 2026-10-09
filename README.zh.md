@@ -16,7 +16,8 @@ Chat browser work uses a dedicated Quicksand Linux VM and does not require Docke
 | --- | --- |
 | 带记忆的对话 | `/ask` + 每用户长期记忆（SQLite）。自动从对话中提取关键事实 |
 | 操作按钮 | AI回复附带可执行按钮；直接下达"删除""创建"等指令时Agent立即执行（主页卡片/提醒/记忆/项目/地区/简报/模型） |
-| 主动协助 | 在聊天中请求定时提醒和每日晨间简报 |
+| 主动协助 | 提醒、每日晨间简报，以及重复任务到期时的私信建议；浏览器任务仍需用户请求或点击按钮 |
+| Specialties | 在聊天中教助手重复任务的步骤；同一浏览器任务完成两次后也会自动记住，可按名称再次执行 |
 | Home | `/home` —— 常驻仪表盘消息：今日行动、天气、GitHub 概要、提醒、记忆卡片，每 30 分钟自动刷新 |
 | Projects | 在聊天中请求创建项目子区，或使用 Projects 按钮 |
 | Agent浏览器 | 在聊天中请求网页操作；Harklet 启动每用户专用 Quicksand Linux VM 并汇报结果。`/stop` 保存并关闭；[设置与限制](docs/browser-agent.md) |
