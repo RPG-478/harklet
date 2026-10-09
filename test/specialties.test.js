@@ -12,7 +12,7 @@ test('a repeatable recipe omits typed values, secret values, coordinates and URL
     { action: 'click_element', index: 0 },
     { action: 'type', text: 'personal-input' },
     { action: 'type_secret', name: 'site_password' },
-    { action: 'done', summary: 'finished' },
+    { action: 'done', summary: 'finished', remember: true },
   ];
   const browser = {
     screenshot: async () => ({ png_base64: 'AAAA', width: 800, height: 600 }),
@@ -25,6 +25,7 @@ test('a repeatable recipe omits typed values, secret values, coordinates and URL
   });
   const candidate = specialtyCandidate('weekly report', result);
   assert.equal(result.status, 'done');
+  assert.equal(result.rememberSpecialty, true);
   assert.match(candidate.instructions, /example.com/);
   assert.match(candidate.instructions, /ボタンかリンク/);
   for (const value of ['private-token', 'personal-input', 'password-secret', '(20,20)'])
@@ -48,15 +49,19 @@ test('specialties are user-scoped and proactive suggestions require an enabled b
   process.env.HARKLET_DB = join(dir, 'test.db');
   const { store, db } = await import('../src/db.js');
   try {
-    const completed = { status: 'done', stepsTaken: ['サイトを開く', '対象を選択'] };
+    const completed = { status: 'done', stepsTaken: ['サイトを開く', '対象を選択'], rememberSpecialty: false };
     assert.equal(learnCompletedWorkflow(store, 'u1', 'weekly report', completed).promoted, false);
     assert.deepEqual(specialtyDefinitionFromArg(store, 'u1', '{"from_last":true,"interval_days":7}'),
       { name: 'weekly report', instructions: '1. サイトを開く\n2. 対象を選択', interval_days: 7 });
     assert.equal(specialtyDefinitionFromArg(store, 'u2', 'last'), null);
     assert.equal(store.findSpecialty('u1', 'weekly report'), null);
-    assert.equal(learnCompletedWorkflow(store, 'u1', 'Weekly  report!', completed).promoted, true);
+    assert.equal(learnCompletedWorkflow(store, 'u1', 'Weekly  report!', completed).promoted, false);
+    assert.equal(store.findSpecialty('u1', 'weekly report'), null);
+    assert.equal(learnCompletedWorkflow(store, 'u1', 'Weekly  report!', { ...completed, rememberSpecialty: true }).promoted, true);
     assert.ok(store.findSpecialty('u1', 'weekly report'));
-    assert.equal(learnCompletedWorkflow(store, 'u1', 'weekly report', completed).promoted, false);
+    assert.equal(learnCompletedWorkflow(store, 'u1', 'weekly report', { ...completed, rememberSpecialty: true }).promoted, false);
+    assert.equal(learnCompletedWorkflow(store, 'u1', '別の定期作業', { ...completed, rememberSpecialty: true }).promoted, true);
+    assert.ok(store.findSpecialty('u1', '別の定期作業'));
     assert.equal(store.listSpecialties('u2').length, 0);
     const start = Date.now() - 8 * 86400000;
     store.saveSpecialty('u1', 'weekly', 'open example.com', 7, start);

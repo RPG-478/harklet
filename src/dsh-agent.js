@@ -38,7 +38,7 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
   - "{\"kind\":\"location\",\"arg\":\"都市名\",\"auto\":true}" … Home天気の地域を設定
   - "{\"kind\":\"brief\",\"arg\":\"{\\"time\\":\\"07:30\\"}\"または\"{\\"off\\":true}\",\"auto\":true}" … 毎朝のブリーフ
   - "{\"kind\":\"model\",\"arg\":\"{\\"model\\":\\"プロバイダ/モデル\\",\\"effort\\":\\"low|medium|high|default\\"}\",\"auto\":true}" … モデル・effort変更
-  - Specialty保存: {"kind":"specialty_save","arg":"JSON文字列 {name, instructions, interval_days?}","auto":true}。ユーザーが会話で作業のやり方を教えたら、その手順を保存。直前に成功したブラウザ作業を「覚えて」と頼まれた時は arg を "last" にする。直前の作業に繰り返し間隔も付ける時は arg を JSON文字列 {"from_last":true,"interval_days":7} にする。interval_daysは希望がある時だけ1〜365。ログイン情報・コードを手順へ書かない。成功した同じブラウザ作業が繰り返された場合も自動で覚える。
+  - Specialty保存: {"kind":"specialty_save","arg":"JSON文字列 {name, instructions, interval_days?}","auto":true}。ユーザーが会話で作業のやり方を教えたら、その手順を保存。直前に成功したブラウザ作業を「覚えて」と頼まれた時は arg を "last" にする。直前の作業に繰り返し間隔も付ける時は arg を JSON文字列 {"from_last":true,"interval_days":7} にする。interval_daysは希望がある時だけ1〜365。ログイン情報・コードを手順へ書かない。ブラウザ作業の完了時はComputer Agentが再利用価値を判断して初回から自動保存できる。
   - Specialty再実行: {"kind":"specialty_run","arg":"登録済みID","auto":true}。ユーザーが覚えた作業を再度頼んだ時は、登録済みIDを使う。
   - Specialty一覧: {"kind":"specialty_list","auto":true}。覚えた作業を見せる。
   - Specialty削除: {"kind":"specialty_del","arg":"登録済みID","auto":true}。頼まれた作業を忘れる。

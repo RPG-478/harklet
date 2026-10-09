@@ -153,7 +153,7 @@ export async function runComputerTask(opts) {
       continue;
     }
 
-    if (a.action === 'done') return { status: 'done', summary: a.summary, steps: step, stepsTaken };
+    if (a.action === 'done') return { status: 'done', summary: a.summary, rememberSpecialty: a.remember, steps: step, stepsTaken };
     if (a.action === 'fail') return { status: 'failed', reason: a.reason, steps: step };
 
     if (a.action === 'request_secrets') {

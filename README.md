@@ -15,7 +15,7 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | Chat with memory | `/ask` + per-user long-term memory (SQLite). Key facts are auto-extracted from conversation |
 | Action Buttons | Replies carry executable buttons, and direct requests are done on the spot: add/delete Home cards, reminders, memories, projects, region, briefing, model |
 | Proactive assistance | Daily briefing plus a DM suggestion when a repeatable Specialty is due; browser work starts only after you ask or press its action button |
-| Specialties | Teach a repeatable workflow in chat, or let Harklet learn after the same browser task completes twice. Ask for it again by name; optional repeat interval |
+| Specialties | Teach a repeatable workflow in chat, or let the computer agent remember a useful workflow when it finishes. Ask for it again by name; optional repeat interval |
 | Home | `/home` — a persistent dashboard message: today's moves, weather, GitHub summary, reminders, memory cards. Auto-refreshes every 30 min |
 | Panels | Home cards are Hark-style panels: the agent can build cards that pull live data from connected services and carry their own action buttons. Reply to the Home message to redesign them in chat |
 | Projects | Ask in chat or use the Projects button to create a topic-scoped thread |

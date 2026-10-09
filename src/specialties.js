@@ -19,7 +19,9 @@ export function learnCompletedWorkflow(store, userId, task, result) {
   if (!candidate) return null;
   const observation = store.saveObservation(userId, observationKey(task), candidate.name, candidate.instructions);
   const canonical = { ...candidate, name: observation.task };
-  if (observation.successes < 2 || store.findSpecialty(userId, canonical.name)) return { candidate: canonical, promoted: false };
+  if (result.rememberSpecialty !== true || store.findSpecialty(userId, canonical.name)) {
+    return { candidate: canonical, promoted: false };
+  }
   store.saveSpecialty(userId, canonical.name, canonical.instructions, null);
   return { candidate: canonical, promoted: true };
 }

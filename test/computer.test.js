@@ -46,6 +46,8 @@ test('parseAction accepts valid replies and rejects bad ones', () => {
   assert.equal(parseAction({ action: 'choose_auth_method', options: [{ id: 'totp', label: '認証アプリ' }, { id: 'email', label: 'メール' }] }, SCREEN).ok, true);
   assert.equal(parseAction({ action: 'choose_auth_method', options: [{ id: 'totp', label: 'A' }, { id: 'totp', label: 'B' }] }, SCREEN).ok, false);
   assert.equal(parseAction({ action: 'share_auth_qr' }, SCREEN).ok, true);
+  assert.deepEqual(parseAction({ action: 'done', remember: true }, SCREEN).action, { action: 'done', summary: '', remember: true });
+  assert.equal(parseAction({ action: 'done', remember: 'true' }, SCREEN).action.remember, false);
 });
 
 test('selected 2FA method reaches the agent and QR screenshot goes only to the handoff', async () => {
