@@ -11,7 +11,9 @@ npm run register
 npm start
 ```
 
-Install Node.js 22.5+ and Python 3.11+. On Windows, hardware acceleration uses Windows Hypervisor Platform (WHPX); software emulation is slower. The first install downloads QEMU and multiple VM image layers, so allow disk space and download time. `npm run browser:install` creates `sidecar/.venv` and installs Quicksand plus its QEMU and CUA images.
+Install Node.js 22.5+ and Python 3.11+. On Windows, hardware acceleration uses Windows Hypervisor Platform (WHPX); software emulation is slower. `npm run browser:install` creates `sidecar/.venv` and installs Quicksand plus its QEMU and CUA images.
+
+Disk: the first install downloads about 1.2 GB of wheels (QEMU ~42 MB, CUA image ~477 MB, agent and Ubuntu base ~640 MB fetched on first VM boot) and unpacks to roughly 2 GB inside `sidecar/.venv`. VM saves live under `HARKLET_BROWSER_DATA_DIR` (default `./browser-data`) and grow with guest disk writes; keep at least 3 GB free on that drive. Only the latest save per user is kept.
 
 Set `HARKLET_SECRET_KEY` in `.env` to a private random string of at least 16 characters. `HARKLET_CU_MODEL` can select a vision-capable model; otherwise browser work uses `LLM_MODEL`. Ask Harklet in ordinary chat to research or work on a website; it chooses whether to start the browser, posts progress and the final result, and includes that result in the next chat turn. Send private browser requests in a DM. `/stop` stops work, saves the VM and invalidates its viewer link. Idle VMs are saved and stopped after 30 minutes.
 
