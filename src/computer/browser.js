@@ -365,10 +365,18 @@ function humanUrl(id) {
 async function humanBox(id) {
   const p = page(session(id));
   const box = await p.evaluate(() => {
-    const el = document.querySelector(
-      'iframe[src*="captcha"], iframe[src*="hcaptcha"], iframe[title*="challenge"], [data-hcaptcha-widget-id], .h-captcha, #captcha, .g-recaptcha');
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
+    // hCaptcha parks its challenge iframe at y=-9999 while closed, so pick
+    // the largest captcha element that is actually on screen.
+    const els = [...document.querySelectorAll(
+      'iframe[src*="captcha"], iframe[src*="hcaptcha"], iframe[title*="challenge"], [data-hcaptcha-widget-id], .h-captcha, #captcha, .g-recaptcha'
+    )];
+    const visible = els
+      .map(el => el.getBoundingClientRect())
+      .filter(r => r.width > 10 && r.height > 10 &&
+        r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth)
+      .sort((a, b) => b.width * b.height - a.width * a.height);
+    const r = visible[0];
+    if (!r) return null;
     const pad = 16;
     return {
       x: Math.max(0, Math.floor(r.left - pad)),
