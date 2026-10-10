@@ -274,6 +274,14 @@ async function act(id, action) {
       await handle.click({ timeout: 5000 });
       break;
     }
+    case 'fill': {
+      const handle = s.elements[action.index];
+      if (!handle) throw new Error('要素番号が古くなりました');
+      // fill() focuses the field, selects any existing text and replaces it,
+      // so the model does not need a separate click-then-type pair.
+      await handle.fill(action.text, { timeout: 5000 });
+      break;
+    }
     case 'scroll': await p.mouse.wheel(0, action.dy * 100); break;
     case 'type': await p.keyboard.insertText(action.text); break;
     case 'key': {

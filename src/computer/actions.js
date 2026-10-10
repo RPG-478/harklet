@@ -2,7 +2,7 @@ import { isSecretName, isOneTimeSecretField } from './names.js';
 
 const KEY_RE = /^[a-zA-Z0-9_+]{1,20}$/;
 const TYPES = new Set(['click', 'double_click', 'right_click', 'move', 'scroll', 'type', 'type_secret',
-  'click_element', 'navigate', 'key', 'wait', 'request_secrets', 'choose_auth_method', 'share_auth_qr',
+  'click_element', 'fill', 'navigate', 'key', 'wait', 'request_secrets', 'choose_auth_method', 'share_auth_qr',
   'request_human', 'done', 'fail']);
 
 const bad = error => ({ ok: false, error });
@@ -47,6 +47,13 @@ export function parseAction(raw, { width, height, elementCount = 0 }) {
     case 'click_element': {
       const ok = Number.isInteger(raw.index) && raw.index >= 0 && raw.index < elementCount;
       return ok ? good({ action: t, index: raw.index }) : bad('click_element needs an index from the element list');
+    }
+    case 'fill': {
+      const ok = Number.isInteger(raw.index) && raw.index >= 0 && raw.index < elementCount;
+      if (!ok) return bad('fill needs an index from the element list');
+      if (typeof raw.text !== 'string' || !raw.text || raw.text.length > 300) return bad('fill needs text of 1-300 chars');
+      if (raw.text.includes('{{secret:')) return bad('use type_secret for saved values');
+      return good({ action: t, index: raw.index, text: raw.text });
     }
     case 'type': {
       if (typeof raw.text !== 'string' || !raw.text || raw.text.length > 300) return bad('type needs text of 1-300 chars');

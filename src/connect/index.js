@@ -12,6 +12,7 @@ export const PROVIDERS = {
     disconnect: g.googleDisconnect,
     ops: {
       gmail_unread: { desc: 'Gmail未読メール(3日以内)上位5件', run: g.gmailUnread },
+      gmail_trash: { desc: 'Gmail検索条件に一致するメールをゴミ箱へ(例 "google:gmail_trash from:reddit.com")。要gmail.modify', run: (u, arg) => g.gmailTrash(u, arg), takesArg: true },
       calendar_today: { desc: 'Googleカレンダーの今日の予定', run: g.calendarToday },
     },
   },
@@ -48,15 +49,21 @@ export function opsCatalog(userId) {
 }
 
 // "provider:op" → result text. Throws with a human-readable message.
+// A ref may carry one argument after a space: "google:gmail_trash from:reddit".
 export async function runOp(userId, ref) {
-  const [pk, ok] = String(ref ?? '').split(':');
+  const raw = String(ref ?? '').trim();
+  const space = raw.indexOf(' ');
+  const base = space < 0 ? raw : raw.slice(0, space);
+  const arg = space < 0 ? '' : raw.slice(space + 1).trim();
+  const [pk, ok] = base.split(':');
   const p = PROVIDERS[pk];
   if (!p) throw new Error('不明なサービス: ' + pk + '（' + Object.keys(PROVIDERS).join('/') + '）');
   if (!p.configured()) return p.name + ' はこのBotで未設定です（管理者が .env にクライアントIDを入れる必要があります）';
   if (!p.connected(userId)) return p.name + ' が未接続です。先に connect で接続してください';
   const op = p.ops[ok];
   if (!op) return p.name + ' にその操作はありません。可能: ' + Object.keys(p.ops).join(', ');
-  return op.run(userId);
+  if (op.takesArg && !arg) return op.desc;
+  return op.run(userId, arg || undefined);
 }
 
 // For panels: fetch several ops, tolerate per-op failure.

@@ -16,6 +16,8 @@ function toBridge(a) {
       return { type: a.action, x: a.x, y: a.y };
     case 'click_element':
       return { type: 'click_element', index: a.index };
+    case 'fill':
+      return { type: 'fill', index: a.index, text: a.text };
     case 'scroll':
       return { type: 'scroll', x: a.x, y: a.y, dy: a.dy };
     case 'type':
@@ -45,6 +47,8 @@ function describe(a) {
       return a.action + ' (' + a.x + ',' + a.y + ')';
     case 'click_element':
       return 'click_element #' + a.index;
+    case 'fill':
+      return 'fill #' + a.index + ' "' + String(a.text).slice(0, 30) + '"';
     case 'scroll':
       return 'scroll (' + a.x + ',' + a.y + ') dy=' + a.dy;
     case 'type':
@@ -81,6 +85,7 @@ export async function runComputerTask(opts) {
   let useImage = true;
   let failures = 0;
   let size = { width: 0, height: 0 };
+  const recentActs = [];
 
   for (let step = 1; step <= maxSteps; step++) {
     if (signal?.aborted) return { status: 'stopped' };
@@ -165,6 +170,16 @@ export async function runComputerTask(opts) {
     if (a.action === 'done') return { status: 'done', summary: a.summary, rememberSpecialty: a.remember, steps: step, stepsTaken };
     if (a.action === 'fail') return { status: 'failed', reason: a.reason, steps: step };
 
+    // Repeating the exact same action three times in a row means the model is
+    // stuck on something that does not change the page. Break the loop.
+    const signature = a.action + ':' + JSON.stringify({ x: a.x, y: a.y, index: a.index, url: a.url, text: a.text?.slice(0, 30) });
+    recentActs.push(signature);
+    if (recentActs.length > 3) recentActs.shift();
+    if (recentActs.length === 3 && recentActs[0] === signature && recentActs[1] === signature) {
+      note(step + '. 同じ操作が3回続きました。別の手段（fillで入力、scroll、要素番号、またはURL直接移動）を試してください');
+      continue;
+    }
+
     if (a.action === 'request_secrets') {
       const saved = await requestSecrets({ message: a.message, fields: a.fields });
       if (!saved) return { status: 'credentials_timeout', steps: step };
@@ -221,6 +236,7 @@ export async function runComputerTask(opts) {
           const kind = ['button', 'a', 'link'].includes(el?.role) ? 'ボタンかリンク' : '要素';
           rememberStep(`画面の${kind}を選択`);
         } else if (['click', 'double_click', 'right_click'].includes(a.action)) rememberStep('画面上の対象を選択');
+        else if (a.action === 'fill') rememberStep('入力欄に必要な文字を入力');
         else if (a.action === 'type') rememberStep('通常の入力欄に必要な文字を入力');
         else if (a.action === 'scroll') rememberStep('画面をスクロール');
         else if (a.action === 'key') rememberStep('キーボード操作で次へ進む');

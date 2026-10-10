@@ -9,6 +9,7 @@ export const SYSTEM_PROMPT = [
   'navigate: {"action": "navigate", "url": "https://example.com/"}。http(s) のページを開く',
   'click / double_click / right_click / move: {"action": "click", "x": 数, "y": 数}',
   'click_element: {"action": "click_element", "index": 番号}。一覧に番号がある部品は、座標より優先してこれを使う。一覧がない時は使えない',
+  'fill: {"action": "fill", "index": 番号, "text": "文字列"}。入力欄への文字入力はこれを使う。クリックしてからtypeする必要はなく、欄を選んで一度で入力する',
   'scroll: {"action": "scroll", "x": 数, "y": 数, "dy": 整数(-20から20、0以外)}',
   'type: {"action": "type", "text": "文字列"}。保存済みの値以外の文字を入力するときだけ使う',
   'type_secret: {"action": "type_secret", "name": "保存名"}。保存済みのログイン情報を入力する。値そのものはあなたには見えない',

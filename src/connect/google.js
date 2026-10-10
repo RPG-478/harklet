@@ -10,7 +10,7 @@ const REFRESH_NAME = 'gws_refresh';
 const PROFILE_NAME = 'gws_profile';
 const SCOPES = [
   'openid', 'email',
-  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/calendar.readonly',
 ].join(' ');
 const REDIRECT = 'http://127.0.0.1';
@@ -116,6 +116,29 @@ export async function calendarToday(userId) {
     return '• ' + t + ' ' + (e.summary ?? '(無題)');
   });
   return '📅 今日の予定\n' + lines.join('\n');
+}
+
+// Move messages matching a Gmail search query to Trash. Caps at 100 per call;
+// the agent can repeat with the same query when more remain.
+export async function gmailTrash(userId, query) {
+  const q = String(query ?? '').trim();
+  if (!q) return '🗑️ 検索条件が空です（例: from:reddit.com）';
+  const list = await api(userId, 'https://gmail.googleapis.com/gmail/v1/users/me/messages?q='
+    + encodeURIComponent(q) + '&maxResults=100');
+  const msgs = list.messages ?? [];
+  if (!msgs.length) return '🗑️ 「' + q + '」に一致するメールはありません';
+  const token = await accessToken(userId);
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: msgs.map(m => m.id), addLabelIds: ['TRASH'] }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error('Gmail API ' + res.status + ': ' + JSON.stringify(data?.error?.message ?? data).slice(0, 200));
+  }
+  const total = list.resultSizeEstimate ?? msgs.length;
+  return '🗑️ ' + msgs.length + '件をゴミ箱に移しました（「' + q + '」の推定残数: ' + Math.max(0, total - msgs.length) + '）';
 }
 
 export function googleDisconnect(userId) {

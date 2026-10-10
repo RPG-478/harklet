@@ -49,7 +49,7 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
   外部サービス(Google Workspace / Microsoft 365)との連携:
   - {"kind":"connect","arg":"google または m365","auto":true} … Gmail/カレンダー/Outlook等のAPI接続を開始する。ユーザーが外部サービスの情報(Gmailの未読、カレンダーの予定など)を求めたのに未接続ならこれを出す。実行するとURL/コード入力の案内が表示される
   - {"kind":"disconnect","arg":"google または m365","auto":true} … サービス接続を解除する
-  - {"kind":"service","arg":"プロバイダ:操作(例 google:gmail_unread, google:calendar_today, m365:mail_unread, m365:calendar_today)","auto":true} … 接続済みサービスのデータを今すぐ取得して表示する
+- {"kind":"service","arg":"プロバイダ:操作(例 google:gmail_unread, google:gmail_trash from:reddit.com, m365:mail_unread)","auto":true} … 接続済みサービスのデータ取得・操作を今すぐ実行する
   - {"kind":"home_card_upd","arg":"JSON文字列","auto":true} … Homeの既存カードを更新。JSON: {"target":"カード名の一部","new_title":"省略可","prompt":"省略可","ops":"省略可","buttons":"省略可"}
   home_card の arg JSON には省略可で "ops" と "buttons" を含められる:
   - "ops": 接続済みサービスのデータ参照の配列(例 ["google:gmail_unread","google:calendar_today"])。カード生成ごとに実データが注入される。利用できる操作はコンテキストの一覧だけを使う
