@@ -195,22 +195,30 @@ async function elements(id) {
   const p = page(s);
   const items = [];
   const handles = [];
+  // Frame calls can stall while a navigation swaps the execution context.
+  // Skip any frame that does not answer quickly instead of stalling the step.
+  const FRAME_MS = 8000;
+  const withTimeout = (promise, what) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(what + ' timed out')), FRAME_MS)),
+  ]);
   // One evaluate + one $$ per frame instead of ~6 round trips per element.
   // Iframe contents (captcha tiles, framed forms) are included: coordinates are
   // shifted by the iframe element's page offset so the model sees page coords.
+  const deadline = Date.now() + 25000;
   for (const frame of p.frames()) {
-    if (items.length >= 60) break;
+    if (items.length >= 60 || Date.now() > deadline) break;
     let ox = 0, oy = 0;
     if (frame !== p.mainFrame()) {
       try {
-        const box = await (await frame.frameElement()).boundingBox();
+        const box = await withTimeout(frame.frameElement().then(el => el.boundingBox()), 'iframe box');
         if (!box) continue;
         ox = box.x; oy = box.y;
       } catch { continue; }
     }
     let meta;
     try {
-      meta = await frame.evaluate(({ sel, limit }) => {
+      meta = await withTimeout(frame.evaluate(({ sel, limit }) => {
         const out = [];
         const nodes = document.querySelectorAll(sel);
         for (let i = 0; i < nodes.length && out.length < limit; i++) {
@@ -223,10 +231,10 @@ async function elements(id) {
           out.push({ n: i, role, label, x: r.x + r.width / 2, y: r.y + r.height / 2 });
         }
         return out;
-      }, { sel: SELECTOR, limit: 200 });
+      }, { sel: SELECTOR, limit: 200 }), 'frame scan');
     } catch { continue; }
     let els;
-    try { els = await frame.$$(SELECTOR); } catch { continue; }
+    try { els = await withTimeout(frame.$$(SELECTOR), 'frame handles'); } catch { continue; }
     for (const m of meta) {
       if (items.length >= 60) break;
       const handle = els[m.n];

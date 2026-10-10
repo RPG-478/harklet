@@ -123,6 +123,7 @@ export async function runComputerTask(opts) {
         height: size.height,
         secretNames,
         elements: elementList ? elementList.elements : null,
+        window: elementList?.window ?? null,
       });
     } catch (err) {
       failures++;

@@ -27,9 +27,10 @@ export const SYSTEM_PROMPT = [
   '同じ操作を繰り返す時は、画面が変わったかを必ず確認してください。',
 ].join('\n');
 
-export function buildUserText({ task, history, width, height, secretNames, elements, pngBase64 }) {
+export function buildUserText({ task, history, width, height, secretNames, elements, pngBase64, window }) {
   const lines = [
     '作業: ' + task,
+    '現在のページ: ' + (window?.url ? window.url + '「' + (window.title || '') + '」' : '不明') + '。このページのまま進めるなら navigate せず、クリックか入力かスクロールで進んでください',
     '画面サイズ: ' + width + 'x' + height + ' ピクセル',
     pngBase64 ? '画面画像: あり（座標でも要素番号でも操作できます）' : '画面画像: なし。要素一覧の番号（click_element）で操作してください',
     '保存済みのログイン情報の名前: ' + (secretNames.length ? secretNames.join(', ') : 'なし') + '（値は見えません）',
