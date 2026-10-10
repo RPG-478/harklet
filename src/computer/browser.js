@@ -35,7 +35,7 @@ function startVm(userHash, port, viewerPort, interactive) {
     let settled = false;
     let stderr = '';
     const lines = createInterface({ input: child.stdout });
-    const timer = setTimeout(() => fail(new Error('Quicksand VM の起動がタイムアウトしました')), 180000);
+    const timer = setTimeout(() => fail(new Error('Quicksand VM の起動がタイムアウトしました')), 300000);
     child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-4000); });
     function fail(err) {
       if (settled) return;
@@ -60,17 +60,19 @@ function startVm(userHash, port, viewerPort, interactive) {
 
 async function connectVm(port) {
   let last;
-  for (let i = 0; i < 50; i++) {
+  // A refused connection fails instantly, so the retry count is also the
+  // wall-clock budget: 300 tries with a 300ms gap covers ~90s of VM boot.
+  for (let i = 0; i < 300; i++) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1500) });
+      const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(4000) });
       if (!response.ok) throw new Error('CDP HTTP ' + response.status);
       const info = await response.json();
       const endpoint = new URL(info.webSocketDebuggerUrl);
       endpoint.hostname = '127.0.0.1';
       endpoint.port = String(port);
-      return await chromium.connectOverCDP(endpoint.toString(), { timeout: 1500 });
+      return await chromium.connectOverCDP(endpoint.toString(), { timeout: 5000 });
     }
-    catch (err) { last = err; await new Promise(resolve => setTimeout(resolve, 200)); }
+    catch (err) { last = err; await new Promise(resolve => setTimeout(resolve, 300)); }
   }
   throw new Error('VM内のChromiumに接続できません: ' + last?.message);
 }

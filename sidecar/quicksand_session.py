@@ -26,7 +26,7 @@ async def main():
     image = str(saved) if (saved / "manifest.json").exists() else "quicksand-cua"
     vm = CuaSandbox(
         image=image,
-        memory="2G",
+        memory=os.environ.get("HARKLET_VM_MEMORY", "2G"),
         cpus=2,
         network_mode=NetworkMode.FULL,
         port_forwards=[PortForward(host=port, guest=9223)] +
@@ -73,7 +73,7 @@ async def main():
                 bridge = await vm.execute("setsid socat TCP-LISTEN:6081,bind=0.0.0.0,reuseaddr,fork "
                     "TCP:127.0.0.1:6080 >/tmp/harklet-novnc-relay.log 2>&1 </dev/null &")
                 if bridge.exit_code == 0:
-                    for _ in range(20):
+                    for _ in range(40):
                         probe = await vm.execute("curl -fsS --max-time 2 http://127.0.0.1:6080/vnc.html >/dev/null")
                         vnc = await vm.execute("ss -ltn | grep -q ':5901 ' && "
                             "ps -C x11vnc -o args= | grep -q -- '" +
@@ -82,8 +82,8 @@ async def main():
                             viewer_ready = True
                             break
                         await asyncio.sleep(0.5)
-        for _ in range(20):
-            probe = await vm.execute("curl -fsS --max-time 2 http://127.0.0.1:9222/json/version")
+        for _ in range(40):
+            probe = await vm.execute("curl -fsS --max-time 4 http://127.0.0.1:9222/json/version")
             if probe.exit_code == 0:
                 break
             await asyncio.sleep(0.5)
