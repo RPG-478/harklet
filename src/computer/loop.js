@@ -86,6 +86,9 @@ export async function runComputerTask(opts) {
   let failures = 0;
   let size = { width: 0, height: 0 };
   const recentActs = [];
+  const PASSIVE_ACTIONS = new Set(['click', 'double_click', 'right_click', 'move', 'click_element']);
+  let lastObsKey = '';
+  let lastMeaningfulStep = 0;
 
   for (let step = 1; step <= maxSteps; step++) {
     if (signal?.aborted) return { status: 'stopped' };
@@ -97,6 +100,8 @@ export async function runComputerTask(opts) {
       browser.screenshot(sessionId).then(r => ({ r })).catch(err => ({ err })),
       readElements(browser, sessionId),
     ]);
+    const obsKey = (elementList?.window?.url ?? '') + '|' + (elementList?.window?.title ?? '');
+    if (obsKey !== lastObsKey) { lastObsKey = obsKey; lastMeaningfulStep = step; }
     const observeMs = Date.now() - tObserve;
     let shot = null;
     if (shotRes.r) {
@@ -170,6 +175,21 @@ export async function runComputerTask(opts) {
     if (a.action === 'done') return { status: 'done', summary: a.summary, rememberSpecialty: a.remember, steps: step, stepsTaken };
     if (a.action === 'fail') return { status: 'failed', reason: a.reason, steps: step };
 
+    // No visible page change for a while: nudge, then hand to the human.
+    const stale = step - lastMeaningfulStep;
+    if (stale >= 15) {
+      const result = await requestHuman?.({ message: '画面操作が進みません。表示されている確認（CAPTCHAや人間確認）を解いてください' });
+      lastMeaningfulStep = step;
+      if (result === 'unavailable') return { status: 'failed', reason: '画面が長時間変化せず、人間確認も依頼できませんでした', steps: step };
+      if (signal?.aborted) return { status: 'stopped' };
+      note(step + '. 画面が ' + stale + ' ステップ変化しないため本人に確認を依頼しました');
+      continue;
+    }
+    if (stale >= 8 && PASSIVE_ACTIONS.has(a.action)) {
+      note(step + '. 画面が ' + stale + ' ステップ変化していません。クリックでは進めないようなら request_human を使ってください');
+      continue;
+    }
+
     // Repeating the exact same action three times in a row means the model is
     // stuck on something that does not change the page. Break the loop.
     const signature = a.action + ':' + JSON.stringify({ x: a.x, y: a.y, index: a.index, url: a.url, text: a.text?.slice(0, 30) });
@@ -183,6 +203,7 @@ export async function runComputerTask(opts) {
     if (a.action === 'request_secrets') {
       const saved = await requestSecrets({ message: a.message, fields: a.fields });
       if (!saved) return { status: 'credentials_timeout', steps: step };
+      lastMeaningfulStep = step;
       note(step + '. ログイン情報を保存 (' + saved.join(', ') + ', 値は非表示)');
       rememberStep('必要なログイン情報を本人に確認');
     } else if (a.action === 'choose_auth_method') {
@@ -217,6 +238,7 @@ export async function runComputerTask(opts) {
           note(step + '. type_secret ' + a.name + ' は未保存のため失敗');
         } else {
           await browser.act(sessionId, { type: 'type', text: value });
+          lastMeaningfulStep = step;
           note(step + '. type_secret ' + a.name + ' を入力');
           rememberStep('保存済みのログイン情報を入力');
         }
@@ -224,10 +246,12 @@ export async function runComputerTask(opts) {
         note(step + '. type_secret ' + a.name + ' は失敗');
       }
     } else if (a.action === 'wait') {
+      lastMeaningfulStep = step;
       await sleep(a.seconds * 1000);
       note(step + '. wait ' + a.seconds + '秒');
     } else {
       try {
+        if (!PASSIVE_ACTIONS.has(a.action)) lastMeaningfulStep = step;
         await browser.act(sessionId, toBridge(a));
         note(step + '. ' + describe(a));
         if (a.action === 'navigate') rememberStep('サイト ' + new URL(a.url).origin + ' を開く');
