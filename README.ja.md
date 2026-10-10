@@ -48,7 +48,9 @@ npm install
 cp .env.example .env   # Windows: copy .env.example .env
 # .env を編集: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
 # 任意: HARKLET_SECRET_KEY (Agentブラウザのログイン情報暗号化)
-# 任意: GOOGLE_CLIENT_ID/SECRET, M365_CLIENT_ID (サービスコネクタ用)
+# 任意: GOOGLE_CLIENT_ID/SECRET, M365_CLIENT_ID (サービスコネクタ用 —
+#   一度きりのOAuthクライアント作成は docs/oauth-setup.md 参照。src/connect/*.js に
+#   既定値を埋め込めば利用者はログインするだけで使えます)
 ```
 
 4. コマンド登録と起動:

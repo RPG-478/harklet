@@ -43,7 +43,9 @@ npm install
 cp .env.example .env   # Windows: copy .env.example .env
 # 编辑 .env: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
 # 可选: HARKLET_SECRET_KEY（加密 Agent 浏览器保存的登录信息）
-# 可选: GOOGLE_CLIENT_ID/SECRET、M365_CLIENT_ID（服务连接器）
+# 可选: GOOGLE_CLIENT_ID/SECRET、M365_CLIENT_ID（服务连接器——
+#   一次性 OAuth 客户端创建见 docs/oauth-setup.md；维护者也可在 src/connect/*.js
+#   内嵌默认值，让终端用户直接登录即可使用）
 ```
 
 4. 注册命令并启动：

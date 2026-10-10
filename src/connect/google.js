@@ -3,8 +3,13 @@
 // http://127.0.0.1 page → user pastes the URL into a Discord modal → we exchange the code.
 import { vault, vaultReady } from '../computer/vault.js';
 
-const CID = () => process.env.GOOGLE_CLIENT_ID?.trim();
-const CSEC = () => process.env.GOOGLE_CLIENT_SECRET?.trim();
+// OSS deployments can embed a default OAuth client the maintainer created once
+// in Google Cloud (rclone-style). End users then only need to sign in. Values
+// in .env override the embedded ones. See docs/oauth-setup.md.
+const DEFAULT_CLIENT_ID = '';
+const DEFAULT_CLIENT_SECRET = '';
+const CID = () => process.env.GOOGLE_CLIENT_ID?.trim() || DEFAULT_CLIENT_ID;
+const CSEC = () => process.env.GOOGLE_CLIENT_SECRET?.trim() || DEFAULT_CLIENT_SECRET;
 const TOKEN_ORIGIN = 'https://oauth2.googleapis.com';
 const REFRESH_NAME = 'gws_refresh';
 const PROFILE_NAME = 'gws_profile';

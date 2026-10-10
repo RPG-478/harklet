@@ -45,7 +45,9 @@ npm install
 cp .env.example .env   # Windows: copy .env.example .env
 # edit .env: DISCORD_TOKEN / DISCORD_CLIENT_ID / OPENAI_API_KEY
 # optional: HARKLET_SECRET_KEY (encrypts saved logins for the agent browser)
-# optional: GOOGLE_CLIENT_ID/SECRET, M365_CLIENT_ID (per-user service connectors)
+# optional: GOOGLE_CLIENT_ID/SECRET, M365_CLIENT_ID (per-user service connectors —
+#   one-time OAuth client setup in docs/oauth-setup.md; maintainers can also embed
+#   defaults in src/connect/*.js so end users just sign in)
 ```
 
 4. Register commands and start:

@@ -3,7 +3,10 @@
 // copy-paste needed, which suits mobile-first Discord use.
 import { vault, vaultReady } from '../computer/vault.js';
 
-const CID = () => process.env.M365_CLIENT_ID?.trim();
+// OSS deployments can embed a default Entra app registration the maintainer
+// created once (see docs/oauth-setup.md). .env values override the default.
+const DEFAULT_CLIENT_ID = '';
+const CID = () => process.env.M365_CLIENT_ID?.trim() || DEFAULT_CLIENT_ID;
 const TENANT = () => process.env.M365_TENANT?.trim() || 'common';
 const TOKEN_ORIGIN = 'https://login.microsoftonline.com';
 const REFRESH_NAME = 'm365_refresh';
