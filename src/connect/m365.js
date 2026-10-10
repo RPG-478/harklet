@@ -95,8 +95,8 @@ async function api(userId, url) {
 
 export async function mailUnread(userId, n = 5) {
   const data = await api(userId, 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?'
-    + '$filter=isRead eq false&$top=' + n + '&$select=subject,from,receivedDateTime&$orderby=receivedDateTime desc');
-  const msgs = data.value ?? [];
+    + '$top=25&$select=subject,from,receivedDateTime,isRead&$orderby=receivedDateTime desc');
+  const msgs = (data.value ?? []).filter(m => m.isRead === false).slice(0, n);
   if (!msgs.length) return '📬 Outlook: 未読はありません';
   const lines = msgs.map(m => '• ' + (m.subject ?? '(無題)') + ' — ' + (m.from?.emailAddress?.name ?? m.from?.emailAddress?.address ?? '').slice(0, 40));
   return '📬 Outlook 未読\n' + lines.join('\n');
@@ -112,7 +112,11 @@ export async function calendarToday(userId) {
     + '&$top=10&$select=subject,start,end&$orderby=start/dateTime');
   const evs = data.value ?? [];
   if (!evs.length) return '📅 今日の予定はありません';
-  const lines = evs.map(e => '• ' + (e.start?.dateTime ?? '').slice(11, 16) + ' ' + (e.subject ?? '(無題)'));
+  const lines = evs.map(e => {
+    const dt = e.start?.dateTime;
+    const t = dt ? new Date(dt + 'Z').toTimeString().slice(0, 5) : '終日';
+    return '• ' + t + ' ' + (e.subject ?? '(無題)');
+  });
   return '📅 今日の予定 (M365)\n' + lines.join('\n');
 }
 

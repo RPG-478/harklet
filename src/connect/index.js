@@ -12,7 +12,7 @@ export const PROVIDERS = {
     disconnect: g.googleDisconnect,
     ops: {
       gmail_unread: { desc: 'Gmail未読メール(3日以内)上位5件', run: g.gmailUnread },
-      gmail_trash: { desc: 'Gmail検索条件に一致するメールをゴミ箱へ(例 "google:gmail_trash from:reddit.com")。要gmail.modify', run: (u, arg) => g.gmailTrash(u, arg), takesArg: true },
+      gmail_trash: { write: true, desc: 'Gmail検索条件に一致するメールをゴミ箱へ(例 "google:gmail_trash from:reddit.com")。要gmail.modify', run: (u, arg) => g.gmailTrash(u, arg), takesArg: true },
       calendar_today: { desc: 'Googleカレンダーの今日の予定', run: g.calendarToday },
     },
   },
@@ -70,6 +70,11 @@ export async function runOp(userId, ref) {
 export async function fetchOps(userId, refs) {
   const parts = [];
   for (const ref of refs ?? []) {
+    const [pk, ok] = String(ref).split(' ')[0].split(':');
+    if (PROVIDERS[pk]?.ops?.[ok]?.write) {
+      parts.push('[' + ref + '] スキップ: カードから書き込み操作は実行しません');
+      continue;
+    }
     try { parts.push('[' + ref + ']\n' + await runOp(userId, ref)); }
     catch (e) { parts.push('[' + ref + '] 取得失敗: ' + e.message); }
   }

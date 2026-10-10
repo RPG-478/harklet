@@ -227,12 +227,13 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
   }
 
   if (a.kind === "remind") {
-    const due = Date.parse(arg ?? "");
-    if (Number.isNaN(due)) return "日時を解釈できませんでした。日時を添えて言い直してください。";
+    const due = parseWhen(String(arg ?? ""));
+    if (!due) return "日時を解釈できませんでした。日時を添えて言い直してください。";
     const id = store.addReminder(userId, channel?.id ?? null, a.label, due);
     return `⏰ リマインダー #${id}: 「${a.label}」→ ${fmtTs(due)}`;
   }
   if (a.kind === "remind_del") {
+    if (!norm(arg)) return "取り消すリマインダーのIDまたは本文の一部を指定してください";
     const rs = store.listReminders(userId);
     const hit = rs.find(r => String(r.id) === String(arg ?? "").trim()) ?? rs.find(r => norm(r.text).includes(norm(arg)));
     if (!hit) return `リマインダー「${arg}」は見つかりませんでした`;
@@ -244,6 +245,7 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
     return `🧠 記憶しました: ${arg ?? a.label}`;
   }
   if (a.kind === "memory_del") {
+    if (!norm(arg)) return "削除する記憶のIDまたは内容の一部を指定してください";
     const ms = store.listMemories(userId);
     const hit = ms.find(m => String(m.id) === String(arg ?? "").trim()) ?? ms.find(m => norm(m.content).includes(norm(arg)));
     if (!hit) return `記憶「${arg}」は見つかりませんでした`;
@@ -267,6 +269,7 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
     let c = {};
     try { c = JSON.parse(arg ?? "{}"); } catch {}
     const cards = store.listHomeCards(userId);
+    if (!norm(c.target ?? c.title ?? "")) return "更新するカード名を target で指定してください";
     const hit = cards.find(x => norm(x.title).includes(norm(c.target ?? c.title ?? "")));
     if (!hit) return `カード「${c.target ?? c.title}」が見つかりませんでした`;
     const upd = {
@@ -289,6 +292,7 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
     return `🏠 カード「${upd.title}」を更新しました`;
   }
   if (a.kind === "home_card_del") {
+    if (!norm(arg)) return "削除するカード名の一部を指定してください";
     const cards = store.listHomeCards(userId);
     const hit = cards.find(c => norm(c.title).includes(norm(arg)));
     if (!hit) return `カード「${arg}」は見つかりませんでした`;
@@ -402,10 +406,6 @@ async function runAction(interaction, action) {
 // ---------- command handlers ----------
 
 const handlers = {
-  async ping(i) {
-    await i.reply({ content: `🏓 pong — ${client.ws.ping}ms`, flags: MessageFlags.Ephemeral });
-  },
-
   async model(i) {
     await i.deferReply({ flags: MessageFlags.Ephemeral });
     await i.editReply(await modelPanel(i.user.id));
@@ -499,12 +499,6 @@ const handlers = {
     return i.reply({ content: parts.join(' / '), flags: MessageFlags.Ephemeral });
   },
 
-  async remember(i) {
-    const text = i.options.getString('text', true);
-    store.addMemory(i.user.id, text);
-    await i.reply({ content: `🧠 記憶しました: ${text}`, flags: MessageFlags.Ephemeral });
-  },
-
   async memory(i) {
     const sub = i.options.getSubcommand();
     if (sub === 'list') {
@@ -524,51 +518,6 @@ const handlers = {
     }
   },
 
-  async remind(i) {
-    const sub = i.options.getSubcommand();
-    if (sub === 'add') {
-      const when = i.options.getString('when', true);
-      const text = i.options.getString('text', true);
-      const due = parseWhen(when);
-      if (!due || due <= Date.now()) {
-        return i.reply({
-          content: `「${when}」を解釈できません。例: 10分後 / 明日9時 / 18:30 / 2026-10-09 09:00`,
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-      const id = store.addReminder(i.user.id, i.channelId, text, due);
-      return i.reply({ content: `⏰ リマインダー #${id}: 「${text}」→ ${fmtTs(due)}`, flags: MessageFlags.Ephemeral });
-    }
-    if (sub === 'list') {
-      const rs = store.listReminders(i.user.id);
-      const body = rs.length
-        ? rs.map(r => `#${r.id} ${r.text} — ${fmtTs(r.due_at)}`).join('\n')
-        : '予定されているリマインダーはありません。';
-      return i.reply({ content: body.slice(0, 1900), flags: MessageFlags.Ephemeral });
-    }
-    if (sub === 'cancel') {
-      const ok = store.cancelReminder(i.user.id, i.options.getInteger('id', true));
-      return i.reply({ content: ok ? '🗑️ キャンセルしました。' : 'そのIDのリマインダーは見つかりません。', flags: MessageFlags.Ephemeral });
-    }
-  },
-
-  async project(i) {
-    const topic = i.options.getString('topic', true);
-    if (!i.channel || i.channel.type !== ChannelType.GuildText) {
-      return i.reply({ content: 'テキストチャンネルで実行してください。', flags: MessageFlags.Ephemeral });
-    }
-    await i.reply(`🗂️ パネルを作成します: **${topic}**\nこのスレッド内はコマンド不要でそのまま会話できます。`);
-    const starter = await i.fetchReply();
-    const thread = await starter.startThread({
-      name: `pj-${topic.slice(0, 90)}`,
-      autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
-    });
-    store.addPanel(thread.id, i.user.id, topic);
-    await thread.send(`📁 プロジェクト「${topic}」。${i.user} との会話をここに記録します。はじめの一言をどうぞ。`);
-  },
-
-  panel: (i) => handlers.project(i),
-
   async service(i) {
     const sub = i.options.getSubcommand();
     if (sub === 'list') {
@@ -585,27 +534,6 @@ const handlers = {
     await i.editReply(asReply(r));
   },
 
-  async brief(i) {
-    const sub = i.options.getSubcommand();
-    if (sub === 'on') {
-      const time = i.options.getString('time') ?? '08:00';
-      if (!/^\d{1,2}:\d{2}$/.test(time)) {
-        return i.reply({ content: '時刻は HH:MM 形式で。例: 08:00', flags: MessageFlags.Ephemeral });
-      }
-      const ch = i.options.getChannel('channel')?.id ?? i.channelId;
-      store.upsertSettings(i.user.id, 1, time, ch);
-      return i.reply({ content: `☀️ モーニングブリーフを毎日 ${time} に <#${ch}> へ送ります。`, flags: MessageFlags.Ephemeral });
-    }
-    if (sub === 'off') {
-      store.upsertSettings(i.user.id, 0, '08:00', null);
-      return i.reply({ content: 'モーニングブリーフを停止しました。', flags: MessageFlags.Ephemeral });
-    }
-    if (sub === 'now') {
-      await i.deferReply({ flags: MessageFlags.Ephemeral });
-      const text = await buildBrief(i.user.id);
-      return i.editReply(text);
-    }
-  },
 };
 
 // ---------- schedulers ----------
@@ -623,7 +551,8 @@ async function deliverReminders() {
       store.markDelivered(r.id);
     } catch (e) {
       console.error(`reminder #${r.id} failed:`, e.message);
-      store.markDelivered(r.id); // 429等でのリトライループを避けるため一旦配信済み扱い
+      store.bumpReminderAttempt(r.id);
+      if ((r.attempts ?? 0) + 1 >= 5) store.markDelivered(r.id); // 5回失敗したら諦める
     }
   }
 }

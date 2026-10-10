@@ -97,6 +97,7 @@ for (const col of ['model TEXT', 'effort TEXT', 'home_channel_id TEXT', 'home_me
   'home_city TEXT', 'home_lat REAL', 'home_lon REAL']) {
   try { db.exec(`ALTER TABLE settings ADD COLUMN ${col}`); } catch { /* exists */ }
 }
+try { db.exec('ALTER TABLE reminders ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
 for (const col of ['ops TEXT', 'buttons TEXT']) {
   try { db.exec(`ALTER TABLE home_cards ADD COLUMN ${col}`); } catch { /* exists */ }
 }
@@ -111,9 +112,10 @@ const q = {
     (SELECT id FROM history WHERE scope = ? ORDER BY id DESC LIMIT 40)`),
   addReminder: db.prepare('INSERT INTO reminders (user_id, channel_id, text, due_at, created_at) VALUES (?, ?, ?, ?, ?)'),
   listReminders: db.prepare('SELECT id, text, due_at FROM reminders WHERE user_id = ? AND delivered = 0 ORDER BY due_at'),
-  dueReminders: db.prepare('SELECT id, user_id, channel_id, text FROM reminders WHERE delivered = 0 AND due_at <= ?'),
+  dueReminders: db.prepare('SELECT id, user_id, channel_id, text, attempts FROM reminders WHERE delivered = 0 AND due_at <= ?'),
   markDelivered: db.prepare('UPDATE reminders SET delivered = 1 WHERE id = ?'),
   cancelReminder: db.prepare('DELETE FROM reminders WHERE id = ? AND user_id = ?'),
+  bumpReminderAttempt: db.prepare('UPDATE reminders SET attempts = attempts + 1 WHERE id = ?'),
   addPanel: db.prepare('INSERT OR REPLACE INTO panels (thread_id, user_id, topic, created_at) VALUES (?, ?, ?, ?)'),
   getPanel: db.prepare('SELECT user_id, topic FROM panels WHERE thread_id = ?'),
   addAction: db.prepare('INSERT INTO pending_actions (user_id, payload, created_at) VALUES (?, ?, ?)'),
@@ -189,6 +191,7 @@ export const store = {
   dueReminders: (now) => q.dueReminders.all(now),
   markDelivered: (id) => q.markDelivered.run(id),
   cancelReminder: (userId, id) => q.cancelReminder.run(id, userId).changes > 0,
+  bumpReminderAttempt: (id) => q.bumpReminderAttempt.run(id),
   addPanel: (threadId, userId, topic) => q.addPanel.run(threadId, userId, topic, Date.now()),
   getPanel: (threadId) => q.getPanel.get(threadId),
   addAction: (userId, payload) =>
