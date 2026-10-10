@@ -6,7 +6,8 @@ import { createInterface } from 'node:readline';
 import { createServer } from 'node:net';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
-import { startRemoteViewer } from './viewer-tunnel.js';
+import { startRemoteViewer, startViewerGateway } from './viewer-tunnel.js';
+import { humanRoutes } from './human-page.js';
 
 const root = resolve(process.env.HARKLET_BROWSER_DATA_DIR || 'browser-data');
 const sessions = new Map();
@@ -140,9 +141,21 @@ async function createSession(userId) {
     const first = context.pages()[0] || await context.newPage();
     await first.setViewportSize({ width: 1280, height: 800 });
     let viewerTunnel = null;
-    if (vm?.viewerReady && process.env.HARKLET_REMOTE_VIEWER !== '0') {
-      try { viewerTunnel = await startRemoteViewer(vm.viewerPort, viewerInteractive); }
-      catch (err) { console.warn('Remote viewer unavailable:', err.message); }
+    if (vm?.viewerReady) {
+      const routes = humanRoutes({
+        shot: () => screenshot(id),
+        click: (x, y) => page(session(id)).mouse.click(x, y),
+        box: () => humanBox(id),
+        interactive: viewerInteractive,
+      });
+      if (process.env.HARKLET_REMOTE_VIEWER !== '0') {
+        try { viewerTunnel = await startRemoteViewer(vm.viewerPort, viewerInteractive, routes); }
+        catch (err) { console.warn('Remote viewer unavailable:', err.message); }
+      }
+      if (!viewerTunnel) {
+        try { viewerTunnel = await startViewerGateway(vm.viewerPort, viewerInteractive, routes); }
+        catch (err) { console.warn('Viewer gateway unavailable:', err.message); }
+      }
     }
     sessions.set(id, { context, page: first, elements: [], vm, remote, viewerTunnel, viewerInteractive });
     return { id, width: 1280, height: 800 };
@@ -323,14 +336,49 @@ async function showDiscordPrompt(id) {
 
 function viewerUrl(id) {
   const s = session(id);
-  if (s.viewerTunnel) return s.viewerTunnel.url;
+  // Remote tunnels expose url; a local gateway exposes openUrl.
+  const via = s.viewerTunnel?.url ?? s.viewerTunnel?.openUrl;
+  if (via) return via;
   const vm = s.vm;
   const viewOnly = viewerInteractive ? '' : '&view_only=true';
   return vm?.viewerReady ? 'http://127.0.0.1:' + vm.viewerPort + '/vnc.html?autoconnect=true' + viewOnly + '&resize=scale' : null;
 }
 
-function remoteViewer(id) { return !!session(id).viewerTunnel; }
+// True only when the link works from other networks (cloudflared tunnel),
+// not just a local authenticated gateway.
+function remoteViewer(id) { return !!session(id).viewerTunnel?.url; }
 
 function viewerIsInteractive(id) { return !!session(id).viewerInteractive; }
 
-export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl, remoteViewer, viewerIsInteractive, showDiscordPrompt };
+// Tap-friendly view for human checks: URL of the cropped /human page when a
+// viewer gateway exists (remote tunnel or local gateway).
+function humanUrl(id) {
+  try {
+    const s = session(id);
+    const base = s.viewerTunnel?.url ?? s.viewerTunnel?.openUrl;
+    return base ? base + '&next=/human' : null;
+  } catch { return null; }
+}
+
+// Bounding box of the on-page human check (captcha iframe), or null when none
+// is present. Coordinates are page-space, matching screenshot pixels.
+async function humanBox(id) {
+  const p = page(session(id));
+  const box = await p.evaluate(() => {
+    const el = document.querySelector(
+      'iframe[src*="captcha"], iframe[src*="hcaptcha"], iframe[title*="challenge"], [data-hcaptcha-widget-id], .h-captcha, #captcha, .g-recaptcha');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const pad = 16;
+    return {
+      x: Math.max(0, Math.floor(r.left - pad)),
+      y: Math.max(0, Math.floor(r.top - pad)),
+      w: Math.min(innerWidth, Math.ceil(r.width + pad * 2)),
+      h: Math.min(innerHeight, Math.ceil(r.height + pad * 2)),
+    };
+  }).catch(() => null);
+  const vp = p.viewportSize() ?? { width: 1280, height: 800 };
+  return { w: vp.width, h: vp.height, box };
+}
+
+export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl, remoteViewer, viewerIsInteractive, humanUrl, showDiscordPrompt };

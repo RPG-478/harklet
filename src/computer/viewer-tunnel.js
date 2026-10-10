@@ -11,7 +11,7 @@ function equalSecret(a, b) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-export async function startViewerGateway(viewerPort, interactive) {
+export async function startViewerGateway(viewerPort, interactive, extraRoutes = null) {
   const token = randomBytes(32).toString('base64url');
   const sockets = new Set();
   const authorized = req => {
@@ -49,8 +49,11 @@ export async function startViewerGateway(viewerPort, interactive) {
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/open' && equalSecret(url.searchParams.get('key'), token)) {
+      const next = url.searchParams.get('next');
+      const dest = next === '/human' ? '/human' :
+        '/vnc.html?autoconnect=true' + (interactive ? '' : '&view_only=true') + '&resize=scale';
       res.writeHead(302, {
-        location: '/vnc.html?autoconnect=true' + (interactive ? '' : '&view_only=true') + '&resize=scale',
+        location: dest,
         'set-cookie': `${COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/`,
         'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
       });
@@ -58,6 +61,13 @@ export async function startViewerGateway(viewerPort, interactive) {
       return;
     }
     if (!authorized(req)) { res.writeHead(403, { 'cache-control': 'no-store' }); res.end(); return; }
+    if (extraRoutes && url.pathname.startsWith('/human')) {
+      Promise.resolve(extraRoutes(req, res, url)).catch(() => {
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
+      return;
+    }
     forward(req, res);
   });
   server.on('connection', socket => {
@@ -99,12 +109,13 @@ export async function startViewerGateway(viewerPort, interactive) {
   return {
     port: server.address().port,
     token,
+    openUrl: `http://127.0.0.1:${server.address().port}/open?key=${token}`,
     close: () => { for (const socket of sockets) socket.destroy(); server.close(); },
   };
 }
 
-export async function startRemoteViewer(viewerPort, interactive) {
-  const gateway = await startViewerGateway(viewerPort, interactive);
+export async function startRemoteViewer(viewerPort, interactive, extraRoutes = null) {
+  const gateway = await startViewerGateway(viewerPort, interactive, extraRoutes);
   const command = process.env.HARKLET_CLOUDFLARED || 'cloudflared';
   const child = spawn(command, ['--no-autoupdate', 'tunnel', '--url', `http://127.0.0.1:${gateway.port}`],
     { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
@@ -133,6 +144,7 @@ export async function startRemoteViewer(viewerPort, interactive) {
     if (!ready) throw new Error('公開ビューアへ接続できません');
     return {
       url,
+      gateway,
       close: () => { child.kill(); gateway.close(); },
     };
   } catch (err) {

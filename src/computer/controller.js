@@ -295,8 +295,9 @@ async function requestHuman(userId, sessionId, channel, message) {
   if (viewer) {
     try {
       const user = await channel?.client?.users?.fetch(userId);
-      await user?.send('🧩 人間確認を解いてください: ' + viewer +
-        '\n画面でクリック・入力できます。終わったら元のチャンネルの「解決した」ボタンを押してください。');
+      const link = browser.humanUrl(sessionId) ?? viewer;
+      await user?.send('🧩 人間確認を解いてください: ' + link +
+        '\nスマホならハイライト部分をタップするだけです。終わったら元のチャンネルの「解決した」ボタンを押してください。');
     } catch {}
   }
   const reqId = Date.now().toString(36) + '-' + (++seq).toString(36);
