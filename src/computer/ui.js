@@ -34,9 +34,9 @@ export function viewerPayload(png) {
   const embed = new EmbedBuilder()
     .setTitle('🖥️ 作業中の画面')
     .setDescription('現在の専用ブラウザ画面です。作業はチャットから依頼できます。')
-    .setImage('attachment://harklet-browser.png')
+    .setImage('attachment://harklet-browser.jpg')
     .setColor(0x5865f2);
-  return { embeds: [embed], files: [new AttachmentBuilder(png, { name: 'harklet-browser.png' })] };
+  return { embeds: [embed], files: [new AttachmentBuilder(png, { name: 'harklet-browser.jpg' })] };
 }
 
 export function authMethodPayload(reqId, message, options) {
@@ -49,10 +49,10 @@ export function authMethodPayload(reqId, message, options) {
 
 export function authQrPayload(reqId, png, message) {
   const embed = new EmbedBuilder().setTitle('🔐 認証用の画面')
-    .setDescription(message).setImage('attachment://harklet-auth.png').setColor(0xfaa61a);
+    .setDescription(message).setImage('attachment://harklet-auth.jpg').setColor(0xfaa61a);
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('cu_qr:' + reqId).setLabel('確認して続ける').setStyle(ButtonStyle.Primary));
-  return { embeds: [embed], components: [row], files: [new AttachmentBuilder(png, { name: 'harklet-auth.png' })] };
+  return { embeds: [embed], components: [row], files: [new AttachmentBuilder(png, { name: 'harklet-auth.jpg' })] };
 }
 
 // A human-only check (hCaptcha etc.) appeared on the page. The viewer link is

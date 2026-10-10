@@ -43,7 +43,9 @@ export function buildUserText({ task, history, width, height, secretNames, eleme
   return lines.join('\n');
 }
 
-export function buildVisionRequest({ provider, baseUrl, apiKey, model, system, text, pngBase64 }) {
+export function buildVisionRequest({ provider, baseUrl, apiKey, model, system, text, pngBase64, effort }) {
+  // Screenshots are JPEG for speed; callers may still hand us a PNG (tests, UI).
+  const mime = pngBase64 && pngBase64.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
   if (provider === 'anthropic') {
     return {
       url: baseUrl + '/v1/messages',
@@ -53,7 +55,7 @@ export function buildVisionRequest({ provider, baseUrl, apiKey, model, system, t
         max_tokens: MAX_TOKENS,
         system,
         messages: [{ role: 'user', content: [
-          ...(pngBase64 ? [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: pngBase64 } }] : []),
+          ...(pngBase64 ? [{ type: 'image', source: { type: 'base64', media_type: mime, data: pngBase64 } }] : []),
           { type: 'text', text },
         ] }],
       },
@@ -65,7 +67,7 @@ export function buildVisionRequest({ provider, baseUrl, apiKey, model, system, t
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: {
         systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [...(pngBase64 ? [{ inlineData: { mimeType: 'image/png', data: pngBase64 } }] : []), { text }] }],
+        contents: [{ role: 'user', parts: [...(pngBase64 ? [{ inlineData: { mimeType: mime, data: pngBase64 } }] : []), { text }] }],
         generationConfig: { temperature: 0, maxOutputTokens: MAX_TOKENS, responseMimeType: 'application/json' },
       },
     };
@@ -77,11 +79,13 @@ export function buildVisionRequest({ provider, baseUrl, apiKey, model, system, t
       model,
       temperature: 0,
       max_tokens: MAX_TOKENS,
+      // OpenRouter/OpenAI reasoning effort hint (low|medium|high). Optional.
+      ...(effort ? { reasoning: { effort } } : {}),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: [
           { type: 'text', text },
-          ...(pngBase64 ? [{ type: 'image_url', image_url: { url: 'data:image/png;base64,' + pngBase64 } }] : []),
+          ...(pngBase64 ? [{ type: 'image_url', image_url: { url: 'data:' + mime + ';base64,' + pngBase64 } }] : []),
         ] },
       ],
     },
@@ -110,10 +114,10 @@ export function parseJsonObject(text) {
 
 // Returns a decide(args) function for the loop. Only the task, the redacted history,
 // the screenshot and the saved secret names are sent to the model.
-export function makeDecider({ provider, baseUrl, apiKey, model, fetchImpl = fetch }) {
+export function makeDecider({ provider, baseUrl, apiKey, model, effort, fetchImpl = fetch }) {
   return async function decide(args) {
     const req = buildVisionRequest({
-      provider, baseUrl, apiKey, model,
+      provider, baseUrl, apiKey, model, effort,
       system: SYSTEM_PROMPT,
       text: buildUserText(args),
       pngBase64: args.pngBase64,

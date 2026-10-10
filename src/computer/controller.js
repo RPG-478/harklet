@@ -129,6 +129,7 @@ async function runTask(userId, s, task, abort, channel, post, onDone) {
         baseUrl: config.llm.baseUrl,
         apiKey: config.llm.apiKey,
         model: visionModel(),
+        effort: process.env.HARKLET_CU_EFFORT?.trim() || undefined,
       })),
       requestSecrets: ({ message, fields }) => requestSecrets(userId, s.id, channel, message, fields),
       chooseAuthMethod: ({ message, options }) => chooseAuthMethod(userId, s.id, channel, message, options),

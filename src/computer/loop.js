@@ -86,15 +86,20 @@ export async function runComputerTask(opts) {
     if (signal?.aborted) return { status: 'stopped' };
     if (Date.now() - started > deadlineMs) return { status: 'timeout' };
 
+    const tObserve = Date.now();
+    // Screenshot and element listing are independent; run them together.
+    const [shotRes, elementList] = await Promise.all([
+      browser.screenshot(sessionId).then(r => ({ r })).catch(err => ({ err })),
+      readElements(browser, sessionId),
+    ]);
+    const observeMs = Date.now() - tObserve;
     let shot = null;
-    try {
-      shot = await browser.screenshot(sessionId);
+    if (shotRes.r) {
+      shot = shotRes.r;
       size = { width: shot.width, height: shot.height };
-    } catch (err) {
-      note(step + '. 画面を取得できませんでした（' + err.message + '）。今回は要素一覧で操作します');
+    } else {
+      note(step + '. 画面を取得できませんでした（' + shotRes.err.message + '）。今回は要素一覧で操作します');
     }
-
-    const elementList = await readElements(browser, sessionId);
     const imageSent = useImage && shot !== null;
     if (!imageSent && !elementList) {
       return { status: 'failed', reason: '画像も要素一覧もないので操作できませんでした', steps: step };
@@ -108,6 +113,7 @@ export async function runComputerTask(opts) {
     }
 
     let raw;
+    const tDecide = Date.now();
     try {
       raw = await decide({
         task,
@@ -131,6 +137,7 @@ export async function runComputerTask(opts) {
       }
       continue;
     }
+    const decideMs = Date.now() - tDecide;
 
     failures = shot ? 0 : failures + 1;
     if (failures >= MAX_CONSECUTIVE_FAILURES) {
@@ -147,6 +154,7 @@ export async function runComputerTask(opts) {
       continue;
     }
     const a = parsed.action;
+    console.log('[cu] step', step, 'observe=' + observeMs + 'ms decide=' + decideMs + 'ms action=' + a.action);
 
     if (!imageSent && COORDINATE_ACTIONS.has(a.action)) {
       note(step + '. 画像がないので座標操作は使えません。要素番号（click_element）で操作してください');

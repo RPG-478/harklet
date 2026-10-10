@@ -183,34 +183,61 @@ async function destroySession(id) {
 
 async function screenshot(id) {
   const p = page(session(id));
-  const png = await p.screenshot({ type: 'png', animations: 'disabled', timeout: 15000 });
+  // JPEG: a 1280x800 PNG often reaches several MB, which is slow to pull out of
+  // the VM and to upload to the model. JPEG keeps the same visual fidelity here.
+  const png = await p.screenshot({ type: 'jpeg', quality: 80, animations: 'disabled', timeout: 15000 });
   const viewport = p.viewportSize();
-  return { png_base64: png.toString('base64'), width: viewport?.width || png.readUInt32BE(16), height: viewport?.height || png.readUInt32BE(20) };
+  return { png_base64: png.toString('base64'), width: viewport?.width || 1280, height: viewport?.height || 800 };
 }
 
 async function elements(id) {
   const s = session(id);
   const p = page(s);
-  const all = p.locator(SELECTOR);
-  const count = Math.min(await all.count(), 200);
   const items = [];
-  await Promise.allSettled(s.elements.map(e => e.dispose()));
-  s.elements = [];
-  for (let i = 0; i < count && items.length < 60; i++) {
-    const loc = all.nth(i);
-    if (!await loc.isVisible().catch(() => false)) continue;
-    const box = await loc.boundingBox().catch(() => null);
-    if (!box) continue;
-    const role = await loc.getAttribute('role').catch(() => null) || await loc.evaluate(el => el.tagName.toLowerCase()).catch(() => 'element');
-    const label = (await loc.getAttribute('aria-label').catch(() => null)
-      || await loc.getAttribute('placeholder').catch(() => null)
-      || await loc.innerText({ timeout: 1000 }).catch(() => '')).trim().slice(0, 80);
-    const index = items.length;
-    const handle = await loc.elementHandle().catch(() => null);
-    if (!handle) continue;
-    s.elements.push(handle);
-    items.push({ index, role, label, x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) });
+  const handles = [];
+  // One evaluate + one $$ per frame instead of ~6 round trips per element.
+  // Iframe contents (captcha tiles, framed forms) are included: coordinates are
+  // shifted by the iframe element's page offset so the model sees page coords.
+  for (const frame of p.frames()) {
+    if (items.length >= 60) break;
+    let ox = 0, oy = 0;
+    if (frame !== p.mainFrame()) {
+      try {
+        const box = await (await frame.frameElement()).boundingBox();
+        if (!box) continue;
+        ox = box.x; oy = box.y;
+      } catch { continue; }
+    }
+    let meta;
+    try {
+      meta = await frame.evaluate(({ sel, limit }) => {
+        const out = [];
+        const nodes = document.querySelectorAll(sel);
+        for (let i = 0; i < nodes.length && out.length < limit; i++) {
+          const el = nodes[i];
+          const r = el.getBoundingClientRect();
+          const st = getComputedStyle(el);
+          if (r.width < 2 || r.height < 2 || st.visibility === 'hidden' || st.display === 'none') continue;
+          const role = el.getAttribute('role') || el.tagName.toLowerCase();
+          const label = (el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.innerText || '').trim().slice(0, 80);
+          out.push({ n: i, role, label, x: r.x + r.width / 2, y: r.y + r.height / 2 });
+        }
+        return out;
+      }, { sel: SELECTOR, limit: 200 });
+    } catch { continue; }
+    let els;
+    try { els = await frame.$$(SELECTOR); } catch { continue; }
+    for (const m of meta) {
+      if (items.length >= 60) break;
+      const handle = els[m.n];
+      if (!handle) continue;
+      handles.push(handle);
+      items.push({ index: items.length, role: m.role, label: m.label,
+        x: Math.round(m.x + ox), y: Math.round(m.y + oy) });
+    }
   }
+  await Promise.allSettled(s.elements.map(e => e.dispose()));
+  s.elements = handles;
   return { window: { title: await p.title().catch(() => ''), url: p.url() }, elements: items };
 }
 

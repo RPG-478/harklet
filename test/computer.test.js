@@ -157,10 +157,10 @@ test('Discord payloads build without a client', () => {
   const modal = secretModal('r1', [{ name: 'site_password', label: 'パスワード' }]).toJSON();
   assert.equal(modal.custom_id, 'cu_secret_modal:r1');
   const view = viewerPayload(Buffer.from('PNGDATA'));
-  assert.equal(view.files[0].name, 'harklet-browser.png');
+  assert.equal(view.files[0].name, 'harklet-browser.jpg');
   const methods = authMethodPayload('r2', '選択', [{ id: 'totp', label: '認証アプリ' }, { id: 'email', label: 'メール' }]);
   assert.equal(methods.components[0].toJSON().components[0].custom_id, 'cu_auth:r2');
   const qr = authQrPayload('r3', Buffer.from('PNGDATA'), 'QR');
-  assert.equal(qr.files[0].name, 'harklet-auth.png');
+  assert.equal(qr.files[0].name, 'harklet-auth.jpg');
   assert.equal(qr.components[0].toJSON().components[0].custom_id, 'cu_qr:r3');
 });
