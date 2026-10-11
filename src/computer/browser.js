@@ -200,9 +200,14 @@ async function screenshot(id) {
   const p = page(session(id));
   // JPEG: a 1280x800 PNG often reaches several MB, which is slow to pull out of
   // the VM and to upload to the model. JPEG keeps the same visual fidelity here.
-  const png = await p.screenshot({ type: 'jpeg', quality: 80, animations: 'disabled', timeout: 15000 });
-  const viewport = p.viewportSize();
-  return { png_base64: png.toString('base64'), width: viewport?.width || 1280, height: viewport?.height || 800 };
+  const [png, viewport] = await Promise.all([
+    p.screenshot({ type: 'jpeg', quality: 80, animations: 'disabled', timeout: 15000 }),
+    // viewportSize() can be stale in the VM (e.g. 1280x800 while the window is
+    // actually 1050x861). innerWidth always matches what was captured.
+    p.evaluate(() => ({ w: innerWidth, h: innerHeight })).catch(() => null),
+  ]);
+  const vp = viewport || p.viewportSize() || { w: 1280, h: 800 };
+  return { png_base64: png.toString('base64'), width: vp.w ?? vp.width, height: vp.h ?? vp.height };
 }
 
 async function elements(id) {
@@ -387,8 +392,9 @@ async function humanBox(id) {
       h: Math.min(innerHeight, Math.ceil(r.height + pad * 2)),
     };
   }).catch(() => null);
-  const vp = p.viewportSize() ?? { width: 1280, height: 800 };
-  return { w: vp.width, h: vp.height, box };
+  const vp = await p.evaluate(() => ({ w: innerWidth, h: innerHeight })).catch(() => null)
+    || p.viewportSize() || { width: 1280, height: 800 };
+  return { w: vp.w ?? vp.width, h: vp.h ?? vp.height, box };
 }
 
 export const browser = { createSession, destroySession, screenshot, elements, act, origin, viewerUrl, remoteViewer, viewerIsInteractive, humanUrl, showDiscordPrompt };

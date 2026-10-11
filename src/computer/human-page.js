@@ -12,17 +12,17 @@ img{display:block;image-rendering:auto;user-select:none;-webkit-user-drag:none}
 <div id=wrap><img id=shot></div>
 <div id=bar><span id=st>loading…</span> · <a id=full href=#>full screen</a> · <button id=re>refresh</button></div>
 <script>
-let page={w:1280,h:800},box=null,scale=1;
+let page={w:1280,h:800},box=null,scale=1,fullMode=false;
 const img=document.getElementById('shot'),wrap=document.getElementById('wrap'),st=document.getElementById('st');
 async function poll(){
- try{const b=await(await fetch('/human/box?t='+Date.now())).json();
+ try{const b=await(await fetch(fullMode?'/human/box?full=1&t='+Date.now():'/human/box?t='+Date.now())).json();
   page={w:b.w||1280,h:b.h||800};box=b.box;
   scale=Math.min(innerWidth-8,box?box.w:page.w)/(box?box.w:page.w)||1;
   if(box){wrap.style.width=(box.w*scale)+'px';wrap.style.height=(box.h*scale)+'px';
     img.style.width=(page.w*scale)+'px';img.style.marginLeft=(-box.x*scale)+'px';img.style.marginTop=(-box.y*scale)+'px';}
   else{wrap.style.width=(page.w*scale)+'px';wrap.style.height='auto';
     img.style.width=(page.w*scale)+'px';img.style.margin='0';}
-  st.textContent=box?'highlighted area — tap inside':'no captcha found — showing full page';
+  st.textContent=box?'highlighted area — tap inside':(fullMode?'full page':'no captcha found — showing full page');
  }catch(e){st.textContent='connection lost…retrying'}
  img.src='/human/shot?t='+Date.now();
 }
@@ -34,7 +34,7 @@ img.addEventListener('click',async e=>{
  setTimeout(poll,700);
 });
 document.getElementById('re').onclick=poll;
-document.getElementById('full').onclick=e=>{e.preventDefault();box=null;poll()};
+document.getElementById('full').onclick=e=>{e.preventDefault();fullMode=!fullMode;document.getElementById('full').textContent=fullMode?'zoom to captcha':'full screen';poll()};
 poll();setInterval(poll,2500);
 </scr`+`ipt>`;
 
@@ -54,6 +54,7 @@ export function humanRoutes(ops) {
     }
     if (url.pathname === '/human/box') {
       const b = await ops.box().catch(() => null);
+      if (b && url.searchParams.get('full')) b.box = null;
       return send(200, JSON.stringify(b ?? { w: 1280, h: 800, box: null }), 'application/json');
     }
     if (url.pathname === '/human/click' && req.method === 'POST') {
