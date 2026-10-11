@@ -45,6 +45,7 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
   - Computer Use: {"kind":"computer","arg":"ブラウザで行う具体的な作業","auto":true}。Web閲覧、Webサイトへのログイン、ログイン後の作業を頼まれたときに使う。日常会話には使わない。
   「Discordにログイン」「Gmailにログイン」のような短い依頼も、専用VMのブラウザで該当サイトを開いてログインを試す依頼として扱う。Discordアプリやユーザーの端末そのものを操作する意味にはしない。
   ログイン情報が必要ならComputer Use側がDiscordの入力モーダルを本人に出し、保存した値をブラウザへ入力できる。「自分でブラウザを開いてログインしてください」と返して終わらない。モーダルを出す前にチャット本文でID・パスワードを要求しない。
+  ブラウザの画面は専用VM経由でいつでも見られる。「自分はブラウザを直接見られない」「API経由でしか情報を取得できない」とは返さない。Webページを見る・開く・確認する・操作する依頼はすべてcomputerアクションで実行する。
   Computer Useは非同期。開始時点で完了したと報告しない。完了結果は別途通知される。Gmail/カレンダー/Outlookの読み取りは下記のサービスコネクタ経由。GitHub等の専用API接続は未実装で、専用ブラウザで開けるWebサイトだけを操作できる。
   外部サービス(Google Workspace / Microsoft 365)との連携:
   - {"kind":"connect","arg":"google または m365","auto":true} … Gmail/カレンダー/Outlook等のAPI接続を開始する。ユーザーが外部サービスの情報(Gmailの未読、カレンダーの予定など)を求めたのに未接続ならこれを出す。実行するとURL/コード入力の案内が表示される
@@ -282,18 +283,33 @@ export async function chatDsh(userId, scope, userText) {
     '【現在日時】' + new Date().toISOString(),
   ].filter(Boolean).join('\n');
 
-  agent.followup(createUserMessage({
+  const waitReply = async () => {
+    await Promise.race([
+      agent.whenIdle(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('応答がタイムアウトしました(120s)')), REPLY_TIMEOUT_MS)),
+    ]);
+  };
+  const followup = text => agent.followup(createUserMessage({
     source: { kind: 'user' },
-    content: [{ type: 'text', text: ctxBlock ? ctxBlock + '\n\n' + userText : userText }],
+    content: [{ type: 'text', text }],
   }));
-  await Promise.race([
-    agent.whenIdle(),
-    new Promise((_, rej) => setTimeout(() => rej(new Error('応答がタイムアウトしました(120s)')), REPLY_TIMEOUT_MS)),
-  ]);
 
-  const raw = lastAssistantText(agent);
+  await followup(ctxBlock ? ctxBlock + '\n\n' + userText : userText);
+  await waitReply();
+
+  let raw = lastAssistantText(agent);
   if (!raw) throw new Error('モデルからの返信がありませんでした');
-  const parsed = parseJsonLoose(raw) ?? { reply: raw };
+  let parsed = parseJsonLoose(raw);
+  if (!parsed) {
+    // The model answered in prose (it does this when it tries to explain it
+    // cannot see the browser). Raw prose must not reach Discord, and without
+    // JSON there are no actions, so ask once for the JSON form.
+    await followup('前の返答は指定のJSONではありませんでした。{"reply":"…","actions":[],"remember":[]} のJSONオブジェクト1つだけを返してください。');
+    await waitReply();
+    raw = lastAssistantText(agent) ?? '';
+    parsed = parseJsonLoose(raw);
+  }
+  parsed = parsed ?? { reply: 'うまく応答を組み立てられませんでした。もう一度お願いします。' };
   if (outcomes.length) computerOutcomes.set(scope, (computerOutcomes.get(scope) ?? []).slice(outcomes.length));
   const result = ensureLoginHandoff(userText, {
     reply: String(parsed.reply ?? raw).slice(0, 3800),
