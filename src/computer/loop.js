@@ -49,6 +49,8 @@ function describe(a) {
       return 'click_element #' + a.index;
     case 'fill':
       return 'fill #' + a.index + ' "' + String(a.text).slice(0, 30) + '"';
+    case 'fill_secret':
+      return 'fill_secret #' + a.index + ' ' + a.name;
     case 'scroll':
       return 'scroll (' + a.x + ',' + a.y + ') dy=' + a.dy;
     case 'type':
@@ -234,19 +236,24 @@ export async function runComputerTask(opts) {
       } else {
         note(step + '. 人間確認の依頼に回答がありませんでした。画面を再確認してください');
       }
-    } else if (a.action === 'type_secret') {
+    } else if (a.action === 'type_secret' || a.action === 'fill_secret') {
       try {
         const value = vault.takeSecret ? vault.takeSecret(userId, a.name) : vault.getSecret(userId, a.name);
         if (value === null) {
-          note(step + '. type_secret ' + a.name + ' は未保存のため失敗');
+          note(step + '. ' + a.action + ' ' + a.name + ' は未保存のため失敗');
         } else {
-          await browser.act(sessionId, { type: 'type', text: value });
+          // fill_secret writes the value straight into the element, which cannot
+          // lose focus like keystrokes. The value never reaches the model.
+          const bridge = a.action === 'fill_secret'
+            ? { type: 'fill', index: a.index, text: value }
+            : { type: 'type', text: value };
+          await browser.act(sessionId, bridge);
           lastMeaningfulStep = step;
-          note(step + '. type_secret ' + a.name + ' を入力');
+          note(step + '. ' + a.action + ' ' + a.name + ' を入力');
           rememberStep('保存済みのログイン情報を入力');
         }
       } catch {
-        note(step + '. type_secret ' + a.name + ' は失敗');
+        note(step + '. ' + a.action + ' ' + a.name + ' は失敗');
       }
     } else if (a.action === 'wait') {
       lastMeaningfulStep = step;

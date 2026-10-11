@@ -2,7 +2,7 @@ import { isSecretName, isOneTimeSecretField } from './names.js';
 
 const KEY_RE = /^[a-zA-Z0-9_+]{1,20}$/;
 const TYPES = new Set(['click', 'double_click', 'right_click', 'move', 'scroll', 'type', 'type_secret',
-  'click_element', 'fill', 'navigate', 'key', 'wait', 'request_secrets', 'choose_auth_method', 'share_auth_qr',
+  'click_element', 'fill', 'fill_secret', 'navigate', 'key', 'wait', 'request_secrets', 'choose_auth_method', 'share_auth_qr',
   'request_human', 'done', 'fail']);
 
 const bad = error => ({ ok: false, error });
@@ -62,6 +62,11 @@ export function parseAction(raw, { width, height, elementCount = 0 }) {
     }
     case 'type_secret':
       return isSecretName(raw.name) ? good({ action: t, name: raw.name }) : bad('type_secret needs a valid saved name');
+    case 'fill_secret': {
+      const ok = Number.isInteger(raw.index) && raw.index >= 0 && raw.index < elementCount;
+      if (!ok) return bad('fill_secret needs an index from the element list');
+      return isSecretName(raw.name) ? good({ action: t, index: raw.index, name: raw.name }) : bad('fill_secret needs a valid saved name');
+    }
     case 'key': {
       const keys = typeof raw.keys === 'string' ? [raw.keys] : raw.keys;
       const ok = Array.isArray(keys) && keys.length >= 1 && keys.length <= 4
