@@ -100,7 +100,10 @@ export async function runComputerTask(opts) {
       browser.screenshot(sessionId).then(r => ({ r })).catch(err => ({ err })),
       readElements(browser, sessionId),
     ]);
-    const obsKey = (elementList?.window?.url ?? '') + '|' + (elementList?.window?.title ?? '');
+    // Stall key: page URL plus a fingerprint of the element list. Titles
+    // flicker on captcha pages, which would reset the counter every step.
+    const els = elementList?.elements;
+    const obsKey = (elementList?.window?.url ?? '') + '|' + (els ? els.length + ':' + els.slice(0, 12).map(e => e.role + ' ' + e.label).join(';') : (elementList?.window?.title ?? ''));
     if (obsKey !== lastObsKey) { lastObsKey = obsKey; lastMeaningfulStep = step; }
     const observeMs = Date.now() - tObserve;
     let shot = null;
