@@ -6,11 +6,12 @@
 const HTML = `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Harklet check</title>
 <style>body{margin:0;background:#111;color:#eee;font:14px sans-serif;text-align:center}
-#wrap{position:relative;display:inline-block;margin-top:8px;overflow:hidden;touch-action:manipulation}
+#wrap{position:relative;display:inline-block;margin-top:8px;overflow:hidden;touch-action:none}
 img{display:block;image-rendering:auto;user-select:none;-webkit-user-drag:none}
 #bar{padding:6px;font-size:12px;color:#aaa}a{color:#8ab4ff}button{font-size:16px;padding:8px 14px;margin:4px}</style>
 <div id=wrap><img id=shot></div>
-<div id=bar><span id=st>loading…</span> · <a id=full href=#>full screen</a> · <button id=re>refresh</button></div>
+<div id=bar><span id=st>loading…</span> · <a id=full href=#>full screen</a> · <button id=re>refresh</button>
+<button id=up>&#9650;</button><button id=dn>&#9660;</button></div>
 <script>
 let page={w:1280,h:800},box=null,scale=1,fullMode=false;
 const img=document.getElementById('shot'),wrap=document.getElementById('wrap'),st=document.getElementById('st');
@@ -26,13 +27,33 @@ async function poll(){
  }catch(e){st.textContent='connection lost…retrying'}
  img.src='/human/shot?t='+Date.now();
 }
-img.addEventListener('click',async e=>{
+let drag=null;
+img.addEventListener('dragstart',e=>e.preventDefault());
+img.addEventListener('pointerdown',e=>{
  const r=img.getBoundingClientRect();
- const x=Math.round((e.clientX-r.left)/scale),y=Math.round((e.clientY-r.top)/scale);
- st.textContent='tap sent ('+x+','+y+')';
- await fetch('/human/click',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({x,y})}).catch(()=>{});
+ drag={x:e.clientX-r.left,y:e.clientY-r.top,sx:e.clientX,sy:e.clientY,t:Date.now()};
+ img.setPointerCapture(e.pointerId);
+});
+img.addEventListener('pointerup',async e=>{
+ if(!drag)return;
+ const r=img.getBoundingClientRect();
+ const dx=e.clientX-drag.sx,dy=e.clientY-drag.sy;
+ const x1=Math.round(drag.x/scale),y1=Math.round(drag.y/scale);
+ const x2=Math.round((drag.x+dx)/scale),y2=Math.round((drag.y+dy)/scale);
+ const isDrag=Math.hypot(dx,dy)>10;
+ drag=null;
+ if(isDrag){
+  st.textContent='drag ('+x1+','+y1+')->('+x2+','+y2+')';
+  await fetch('/human/drag',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sx:x1,sy:y1,ex:x2,ey:y2})}).catch(()=>{});
+ }else{
+  st.textContent='tap sent ('+x1+','+y1+')';
+  await fetch('/human/click',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({x:x1,y:y1})}).catch(()=>{});
+ }
  setTimeout(poll,700);
 });
+img.addEventListener('pointercancel',()=>{drag=null});
+document.getElementById('up').onclick=()=>fetch('/human/scroll',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dy:-450})}).then(poll);
+document.getElementById('dn').onclick=()=>fetch('/human/scroll',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dy:450})}).then(poll);
 document.getElementById('re').onclick=poll;
 document.getElementById('full').onclick=e=>{e.preventDefault();fullMode=!fullMode;document.getElementById('full').textContent=fullMode?'zoom to captcha':'full screen';poll()};
 poll();setInterval(poll,2500);
@@ -63,6 +84,20 @@ export function humanRoutes(ops) {
       const x = Math.max(0, Math.min(4000, Number(b.x) || 0));
       const y = Math.max(0, Math.min(4000, Number(b.y) || 0));
       await ops.click(x, y).catch(() => {});
+      return send(204, '', 'text/plain');
+    }
+    if (url.pathname === '/human/scroll' && req.method === 'POST') {
+      if (!ops.interactive) return send(403, 'view only', 'text/plain');
+      const b = JSON.parse((await readBody(req)) || '{}');
+      const dy = Math.max(-2000, Math.min(2000, Number(b.dy) || 0));
+      if (ops.scroll) await ops.scroll(dy).catch(() => {});
+      return send(204, '', 'text/plain');
+    }
+    if (url.pathname === '/human/drag' && req.method === 'POST') {
+      if (!ops.interactive) return send(403, 'view only', 'text/plain');
+      const b = JSON.parse((await readBody(req)) || '{}');
+      const c = v => Math.max(0, Math.min(4000, Number(v) || 0));
+      if (ops.drag) await ops.drag({ sx: c(b.sx), sy: c(b.sy), ex: c(b.ex), ey: c(b.ey) }).catch(() => {});
       return send(204, '', 'text/plain');
     }
     return send(404, 'not found', 'text/plain');

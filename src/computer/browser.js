@@ -147,6 +147,11 @@ async function createSession(userId) {
       const routes = humanRoutes({
         shot: () => screenshot(id),
         click: (x, y) => page(session(id)).mouse.click(x, y),
+        scroll: dy => page(session(id)).evaluate(d => scrollBy(0, d), dy),
+        drag: async p => {
+          const m = page(session(id)).mouse;
+          await m.move(p.sx, p.sy); await m.down(); await m.move(p.ex, p.ey, { steps: 8 }); await m.up();
+        },
         box: () => humanBox(id),
         interactive: viewerInteractive,
       });
@@ -378,12 +383,18 @@ async function humanBox(id) {
       'iframe[src*="captcha"], iframe[src*="hcaptcha"], iframe[title*="challenge"], [data-hcaptcha-widget-id], .h-captcha, #captcha, .g-recaptcha'
     )];
     const visible = els
-      .map(el => el.getBoundingClientRect())
-      .filter(r => r.width > 10 && r.height > 10 &&
+      .map(el => ({ el, r: el.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 10 && r.height > 10 &&
         r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth)
-      .sort((a, b) => b.width * b.height - a.width * a.height);
-    const r = visible[0];
-    if (!r) return null;
+      .sort((a, b) => b.r.width * b.r.height - a.r.width * a.r.height);
+    const pick = visible[0];
+    if (!pick) return null;
+    // A challenge taller or wider than the screen leaves its submit button
+    // off-screen. Center it so the whole puzzle is reachable by taps.
+    if (pick.r.top < 0 || pick.r.bottom > innerHeight || pick.r.left < 0 || pick.r.right > innerWidth) {
+      pick.el.scrollIntoView({ block: 'center', inline: 'center' });
+    }
+    const r = pick.el.getBoundingClientRect();
     const pad = 16;
     return {
       x: Math.max(0, Math.floor(r.left - pad)),
