@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { store } from './db.js';
 import { ensureLoginHandoff } from './computer/login-intent.js';
+import { vault } from './computer/vault.js';
 import { providerStatus, opsCatalog } from './connect/index.js';
 import { specialtyDue } from './specialties.js';
 
@@ -46,6 +47,7 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
   「Discordにログイン」「Gmailにログイン」のような短い依頼も、専用VMのブラウザで該当サイトを開いてログインを試す依頼として扱う。Discordアプリやユーザーの端末そのものを操作する意味にはしない。
   ログイン情報が必要ならComputer Use側がDiscordの入力モーダルを本人に出し、保存した値をブラウザへ入力できる。「自分でブラウザを開いてログインしてください」と返して終わらない。モーダルを出す前にチャット本文でID・パスワードを要求しない。
   ブラウザの画面は専用VM経由でいつでも見られる。「自分はブラウザを直接見られない」「API経由でしか情報を取得できない」とは返さない。Webページを見る・開く・確認する・操作する依頼はすべてcomputerアクションで実行する。
+  reply文では「モーダルで入力してください」などの案内をしない。入力モーダルが必要になった時はComputer Useが勝手に出すので、保存済み情報があれば確認なくそのまま使われる。
   Computer Useは非同期。開始時点で完了したと報告しない。完了結果は別途通知される。Gmail/カレンダー/Outlookの読み取りは下記のサービスコネクタ経由。GitHub等の専用API接続は未実装で、専用ブラウザで開けるWebサイトだけを操作できる。
   外部サービス(Google Workspace / Microsoft 365)との連携:
   - {"kind":"connect","arg":"google または m365","auto":true} … Gmail/カレンダー/Outlook等のAPI接続を開始する。ユーザーが外部サービスの情報(Gmailの未読、カレンダーの予定など)を求めたのに未接続ならこれを出す。実行するとURL/コード入力の案内が表示される
@@ -280,6 +282,7 @@ export async function chatDsh(userId, scope, userText) {
     city ? '【ユーザーの地域】' + city + '（Homeの天気カードはこの地域）' : '',
     (() => { const l = providerStatus(userId); return l.length ? '【外部サービス接続状況(ユーザー個別)】' + l.join(' / ') : ''; })(),
     (() => { const l = opsCatalog(userId); return l.length ? '【接続済みサービスの操作(service/home_cardのopsに使える)】' + l.join(' / ') : ''; })(),
+    (() => { const l = vault.listSecretNames(userId); return l.length ? '【保存済みのログイン情報】' + l.join(' / ') + '。ブラウザ作業では fill_secret/type_secret で使えるので本人への入力依頼は不要' : ''; })(),
     '【現在日時】' + new Date().toISOString(),
   ].filter(Boolean).join('\n');
 

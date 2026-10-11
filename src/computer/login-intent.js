@@ -7,7 +7,7 @@ export function ensureLoginHandoff(userText, result) {
   if (!/^(?:https?:\/\/\S+|[\p{L}\p{N}._ -]{2,80})(?:に|へ|で)ログイン(?:して.*|する|してください)?[。!！]?$/u.test(task)) return result;
   return {
     ...result,
-    reply: '専用ブラウザでログインを始めます。必要な入力はDiscordのモーダルでお願いします。',
+    reply: '専用ブラウザでログインを始めます。保存済みのログイン情報があればそのまま使い、なければDiscordのモーダルで聞きます。',
     actions: [...(result.actions ?? []).slice(0, 2), { kind: 'computer', arg: task, auto: true }],
   };
 }
