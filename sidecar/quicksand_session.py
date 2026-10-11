@@ -47,8 +47,13 @@ async def main():
         prep = await vm.execute("systemctl stop chromium.service && mkdir -p /root/.config/harklet-browser")
         if prep.exit_code != 0:
             raise RuntimeError(f"Chromium preparation failed: {prep.stderr}")
+        # Kiosk mode pins the viewport to the X display size, so screenshot,
+        # element coordinates, mouse clicks and the noVNC view all share one
+        # coordinate space. A windowed browser drifts (e.g. 1050x861 vs the
+        # 1280x800 the code assumed) and every offset breaks click aiming.
         result = await vm.execute("DISPLAY=:0 setsid /usr/local/bin/chromium --no-sandbox "
-            "--disable-gpu --no-first-run --password-store=basic --remote-debugging-address=0.0.0.0 "
+            "--disable-gpu --no-first-run --kiosk --force-device-scale-factor=1 "
+            "--hide-crash-restore-bubble --password-store=basic --remote-debugging-address=0.0.0.0 "
             "--remote-debugging-port=9222 --remote-allow-origins=* "
             "--user-data-dir=/root/.config/harklet-browser about:blank "
             ">/tmp/harklet-chromium.log 2>&1 </dev/null &")
