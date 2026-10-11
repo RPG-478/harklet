@@ -307,7 +307,13 @@ async function act(id, action) {
       await handle.fill(action.text, { timeout: 5000 });
       break;
     }
-    case 'scroll': await p.mouse.wheel(0, action.dy * 100); break;
+    case 'scroll': {
+      // wheel() scrolls whatever is under the pointer, so move to the spot
+      // the model aimed at first; otherwise scrolls land on the wrong pane.
+      await p.mouse.move(action.x, action.y);
+      await p.mouse.wheel(0, action.dy * 100);
+      break;
+    }
     case 'type': await p.keyboard.insertText(action.text); break;
     case 'key': {
       const chord = action.keys.map(k => KEY[k.toLowerCase()] || (k.length === 1 ? k.toUpperCase() : null));

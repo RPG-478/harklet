@@ -256,12 +256,10 @@ export async function runComputerTask(opts) {
         note(step + '. ' + a.action + ' ' + a.name + ' は失敗');
       }
     } else if (a.action === 'wait') {
-      lastMeaningfulStep = step;
       await sleep(a.seconds * 1000);
       note(step + '. wait ' + a.seconds + '秒');
     } else {
       try {
-        if (!PASSIVE_ACTIONS.has(a.action)) lastMeaningfulStep = step;
         await browser.act(sessionId, toBridge(a));
         note(step + '. ' + describe(a));
         if (a.action === 'navigate') rememberStep('サイト ' + new URL(a.url).origin + ' を開く');
