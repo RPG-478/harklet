@@ -2,11 +2,18 @@
 
 import asyncio
 import json
+import logging
 import os
 import shutil
 import sys
 import uuid
 from pathlib import Path
+
+# stderr is captured by startVm and surfaced on failure; stdout is the protocol.
+logging.basicConfig(
+    level=logging.DEBUG if os.environ.get("HARKLET_DEBUG") else logging.INFO,
+    stream=sys.stderr,
+)
 
 from quicksand import NetworkMode, PortForward
 from quicksand_cua import CuaSandbox

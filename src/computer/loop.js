@@ -190,8 +190,8 @@ export async function runComputerTask(opts) {
       note(step + '. 画面が ' + stale + ' ステップ変化しないため本人に確認を依頼しました');
       continue;
     }
-    if (stale >= 8 && PASSIVE_ACTIONS.has(a.action)) {
-      note(step + '. 画面が ' + stale + ' ステップ変化していません。クリックでは進めないようなら request_human を使ってください');
+    if (stale >= 8) {
+      note(step + '. 画面が ' + stale + ' ステップ変化していません。この方法では進めないようなら request_human を使ってください');
       continue;
     }
 
