@@ -98,9 +98,14 @@ export async function runComputerTask(opts) {
 
     const tObserve = Date.now();
     // Screenshot and element listing are independent; run them together.
-    const [shotRes, elementList] = await Promise.all([
-      browser.screenshot(sessionId).then(r => ({ r })).catch(err => ({ err })),
-      readElements(browser, sessionId),
+    // Bound the whole observe: a starved guest can leave an inner call without
+    // a reply forever, which used to stall the task silently past its deadline.
+    const [shotRes, elementList] = await Promise.race([
+      Promise.all([
+        browser.screenshot(sessionId).then(r => ({ r })).catch(err => ({ err })),
+        readElements(browser, sessionId),
+      ]),
+      sleep(45000).then(() => [{ err: new Error('observe timed out') }, null]),
     ]);
     // Stall key: page URL plus a fingerprint of the element list. Titles
     // flicker on captcha pages, which would reset the counter every step.

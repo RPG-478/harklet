@@ -209,7 +209,10 @@ async function screenshot(id) {
     p.screenshot({ type: 'jpeg', quality: 80, animations: 'disabled', timeout: 15000 }),
     // viewportSize() can be stale in the VM (e.g. 1280x800 while the window is
     // actually 1050x861). innerWidth always matches what was captured.
-    p.evaluate(() => ({ w: innerWidth, h: innerHeight })).catch(() => null),
+    Promise.race([
+      p.evaluate(() => ({ w: innerWidth, h: innerHeight })),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('viewport eval timed out')), 8000)),
+    ]).catch(() => null),
   ]);
   const vp = viewport || p.viewportSize() || { w: 1280, h: 800 };
   return { png_base64: png.toString('base64'), width: vp.w ?? vp.width, height: vp.h ?? vp.height };
@@ -269,9 +272,12 @@ async function elements(id) {
         x: Math.round(m.x + ox), y: Math.round(m.y + oy) });
     }
   }
-  await Promise.allSettled(s.elements.map(e => e.dispose()));
+  // A wedged frame or a starved guest can leave dispose() and title() without
+  // a reply forever, which silently stalls the whole agent step. Bound both.
+  await withTimeout(Promise.allSettled(s.elements.map(e => e.dispose())), 'dispose').catch(() => {});
   s.elements = handles;
-  return { window: { title: await p.title().catch(() => ''), url: p.url() }, elements: items };
+  const title = await withTimeout(p.title(), 'page title').catch(() => '');
+  return { window: { title, url: p.url() }, elements: items };
 }
 
 const KEY = { ctrl: 'Control', control: 'Control', shift: 'Shift', meta: 'Meta', cmd: 'Meta',
