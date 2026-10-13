@@ -25,15 +25,19 @@ test('Quicksand VM persists browser cookies across restarts',
       ({ id } = await browser.createSession('persistent-user'));
       const viewer = browser.viewerUrl(id);
       if (process.env.HARKLET_TEST_REMOTE_VIEWER === '1') assert.equal(browser.remoteViewer(id), true);
-      if (browser.remoteViewer(id)) assert.match(viewer, /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/open\?key=/);
-      else assert.match(viewer, /^http:\/\/127\.0\.0\.1:\d+\/vnc\.html\?/);
+      if (browser.remoteViewer(id)) {
+        assert.ok(viewer.startsWith('https://'), viewer);
+        assert.ok(viewer.includes('.trycloudflare.com/open?key='), viewer);
+      } else {
+        assert.ok(viewer.startsWith('http://127.0.0.1:'), viewer);
+        assert.ok(viewer.includes('/open?key='), viewer);
+      }
       const opened = await fetch(viewer, { redirect: 'manual', signal: AbortSignal.timeout(10000) });
-      const viewerResponse = browser.remoteViewer(id)
-        ? await fetch(new URL(opened.headers.get('location'), viewer), {
-          headers: { cookie: opened.headers.get('set-cookie').split(';')[0] },
-          signal: AbortSignal.timeout(10000),
-        })
-        : opened;
+      assert.equal(opened.status, 302);
+      const viewerResponse = await fetch(new URL(opened.headers.get('location'), viewer), {
+        headers: { cookie: opened.headers.get('set-cookie').split(';')[0] },
+        signal: AbortSignal.timeout(10000),
+      });
       assert.equal(viewerResponse.status, 200);
       await browser.act(id, { type: 'navigate', url: base + '/set' });
       await browser.act(id, { type: 'navigate', url: base + '/check' });
