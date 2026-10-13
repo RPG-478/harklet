@@ -103,6 +103,17 @@ Three provider styles are supported; the active one is auto-detected from which 
 - While the model is thinking, Discord's native typing indicator is used.
 - Auto-extracted memories can misfire. Manage them with `/memory list` and `/memory forget`.
 
+## Testing
+
+`npm test` runs the unit suite (no secrets needed). The VM/integration tests are opt-in because they boot a real Quicksand guest and need the local Python sidecar:
+
+| Test | Gate | What it proves |
+| --- | --- | --- |
+| `test/quicksand.integration.test.js` | `HARKLET_TEST_QUICKSAND=1` | VM boots, cookies persist across restarts |
+| `test/login-fill.integration.test.js` | `HARKLET_TEST_LOGIN_FILL=1` | In-VM field detection + secret fill + submit reaches an authenticated page |
+| `test/login-handoff.integration.test.js` | `HARKLET_TEST_LOGIN_HANDOFF=1` + LLM key | Vision agent asks for credentials on the real Discord login page |
+| `test/viewer-tunnel.integration.test.js` | `HARKLET_TEST_REMOTE_VIEWER=1` | Cloudflare quick tunnel serves the authenticated viewer over HTTPS |
+
 ## License
 
 MIT

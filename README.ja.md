@@ -105,6 +105,17 @@ npm start
 - Message Content Intent が未許可でも、DM と Botへのメンションは本文が届くため会話できます(チャンネル内の自由会話のみ不可)。
 - AI の自動記憶抽出は誤爆しえます。`/memory list` / `forget` で管理してください。
 
+## テスト
+
+`npm test` でユニットテスト(秘密情報不要)。VM/integration テストは実際の Quicksand guest を起動するため opt-in です:
+
+| テスト | 有効化 | 検証内容 |
+| --- | --- | --- |
+| `test/quicksand.integration.test.js` | `HARKLET_TEST_QUICKSAND=1` | VM起動・再起動後のcookie永続化 |
+| `test/login-fill.integration.test.js` | `HARKLET_TEST_LOGIN_FILL=1` | VM内のフィールド検出+シークレット入力+送信で認証ページへ到達 |
+| `test/login-handoff.integration.test.js` | `HARKLET_TEST_LOGIN_HANDOFF=1` + LLMキー | 実Discordログインページでvision agentが資格情報を要求 |
+| `test/viewer-tunnel.integration.test.js` | `HARKLET_TEST_REMOTE_VIEWER=1` | Cloudflareトンネル経由で認証付きビューアをHTTPS配信 |
+
 ## License
 
 MIT

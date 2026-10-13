@@ -101,6 +101,17 @@ npm start
 - 模型思考期间使用 Discord 原生「正在输入…」提示。
 - 自动提取的记忆可能有误，可用 `/memory list` / `/memory forget` 管理。
 
+## 测试
+
+`npm test` 运行单元测试(无需密钥)。VM/integration 测试需要启动真实 Quicksand guest，因此默认关闭:
+
+| 测试 | 开启方式 | 验证内容 |
+| --- | --- | --- |
+| `test/quicksand.integration.test.js` | `HARKLET_TEST_QUICKSAND=1` | VM启动、跨重启的cookie持久化 |
+| `test/login-fill.integration.test.js` | `HARKLET_TEST_LOGIN_FILL=1` | VM内字段检测+密钥填充+提交后到达认证页 |
+| `test/login-handoff.integration.test.js` | `HARKLET_TEST_LOGIN_HANDOFF=1` + LLM密钥 | vision agent在真实Discord登录页请求凭据 |
+| `test/viewer-tunnel.integration.test.js` | `HARKLET_TEST_REMOTE_VIEWER=1` | Cloudflare隧道以HTTPS提供认证查看器 |
+
 ## License
 
 MIT
