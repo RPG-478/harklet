@@ -105,7 +105,7 @@ export async function runComputerTask(opts) {
         browser.screenshot(sessionId).then(r => ({ r })).catch(err => ({ err })),
         readElements(browser, sessionId),
       ]),
-      sleep(45000).then(() => [{ err: new Error('observe timed out') }, null]),
+      new Promise(resolve => setTimeout(() => resolve([{ err: new Error('observe timed out') }, null]), 45000)),
     ]);
     // Stall key: page URL plus a fingerprint of the element list. Titles
     // flicker on captcha pages, which would reset the counter every step.
