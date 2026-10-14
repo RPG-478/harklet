@@ -5,9 +5,8 @@ import { vault, vaultReady } from '../computer/vault.js';
 import { t } from '../i18n.js';
 import { userLang } from '../user-lang.js';
 
-// OSS deployments can embed a default OAuth client the maintainer created once
-// in Google Cloud (rclone-style). End users then only need to sign in. Values
-// in .env override the embedded ones. See docs/oauth-setup.md.
+// Configure the OAuth client in the untracked .env file. Keep these defaults
+// empty in the public repository. See docs/oauth-setup.md.
 const DEFAULT_CLIENT_ID = '';
 const DEFAULT_CLIENT_SECRET = '';
 const CID = () => process.env.GOOGLE_CLIENT_ID?.trim() || DEFAULT_CLIENT_ID;

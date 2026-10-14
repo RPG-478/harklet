@@ -5,13 +5,11 @@ their own consent. The API calls need an OAuth client, and Google/Microsoft
 only let a human create one — this is a one-time ~5 minute job for whoever
 runs the bot, not per user.
 
-Two ways to feed the client into the bot:
-
-- `.env`: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `M365_CLIENT_ID`
-- Embedded defaults: paste the values into `DEFAULT_CLIENT_ID` /
-  `DEFAULT_CLIENT_SECRET` in `src/connect/google.js` and `src/connect/m365.js`,
-  so OSS users get working connectors without any env vars (rclone-style).
-  `.env` always wins when both are set.
+Put the client values in the untracked `.env` file:
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `M365_CLIENT_ID`.
+Do not commit OAuth client values to the public repository. Each bot operator
+configures their own OAuth app once; individual Discord users then connect
+their accounts through the bot.
 
 ## Google Workspace (Gmail + Calendar)
 
@@ -27,7 +25,7 @@ Two ways to feed the client into the bot:
    "unverified app" warning and click Advanced → Continue.
 5. APIs & Services → Credentials → Create Credentials → **OAuth client ID** →
    Application type: **Desktop app** → Create.
-6. Copy the client ID and secret into `.env` or the `DEFAULT_*` constants.
+6. Copy the client ID and secret into `.env`.
    Desktop clients do not need a redirect URI — the loopback flow is implicit.
 
 Scopes used: `openid email gmail.modify calendar.readonly`. After changing

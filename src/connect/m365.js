@@ -5,8 +5,8 @@ import { vault, vaultReady } from '../computer/vault.js';
 import { t } from '../i18n.js';
 import { userLang } from '../user-lang.js';
 
-// OSS deployments can embed a default Entra app registration the maintainer
-// created once (see docs/oauth-setup.md). .env values override the default.
+// Configure the Entra client ID in the untracked .env file. Keep this default
+// empty in the public repository. See docs/oauth-setup.md.
 const DEFAULT_CLIENT_ID = '';
 const CID = () => process.env.M365_CLIENT_ID?.trim() || DEFAULT_CLIENT_ID;
 const TENANT = () => process.env.M365_TENANT?.trim() || 'common';
