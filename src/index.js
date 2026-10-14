@@ -5,6 +5,8 @@ import {
   TextInputStyle, PermissionFlagsBits, MessageFlags,
 } from 'discord.js';
 import { config } from './config.js';
+import { t, LANG_NAMES } from './i18n.js';
+import { userLang, noteAutoLang, noteLocale, languageTag } from './user-lang.js';
 import { store, clearHarkletDatabase } from './db.js';
 import { chatDsh, invalidateUserAgents, recordComputerOutcome, shutdownDsh } from './dsh-agent.js';
 import { homePayload, geocodeCity } from './home.js';
@@ -16,6 +18,8 @@ import * as google from './connect/google.js';
 import * as m365 from './connect/m365.js';
 import { PROVIDERS, providerStatus, runOp } from './connect/index.js';
 import { randomBytes } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { learnCompletedWorkflow, specialtyDefinitionFromArg, specialtyTask } from './specialties.js';
 
 function makeClient(withContent) {
@@ -66,13 +70,13 @@ async function resetTargets(guild) {
 }
 
 async function performReset(i) {
-  if (computerIsBusy()) throw new Error('Computer Useの作業中です。/stop で停止してから再実行してください');
+  if (computerIsBusy()) throw new Error(t(userLang(i.user.id), 'reset.errBusy'));
   const { category, channels, threads } = await resetTargets(i.guild);
   // Deleting a parent channel also removes its threads. The bot has ManageChannels,
   // but may not have ManageThreads, so only delete threads outside managed channels.
   const detachedThreads = detachedProjectThreads(channels, threads);
   if (detachedThreads.length && !i.guild.members.me?.permissions.has(PermissionFlagsBits.ManageThreads)) {
-    throw new Error('管理カテゴリ外にプロジェクトスレッドがあります。Botに「スレッド管理」権限を付けてから再実行してください');
+    throw new Error(t(userLang(i.user.id), 'reset.errThreads'));
   }
   for (const thread of detachedThreads) await thread.delete('Harklet test reset');
   for (const channel of channels) await channel.delete('Harklet test reset');
@@ -81,7 +85,7 @@ async function performReset(i) {
   const tables = clearHarkletDatabase();
   pendingModelSel.clear();
   pendingEffortSel.clear();
-  return `リセット完了: スレッド${threads.length}件、チャンネル${channels.length + (category ? 1 : 0)}件、DB ${tables.length}テーブルのデータを消去しました。保存済みブラウザVMのCookieは残ります。`;
+  return t(userLang(i.user.id), 'reset.done', { threads: threads.length, channels: channels.length + (category ? 1 : 0), tables: tables.length });
 }
 
 async function modelPanel(userId) {
@@ -97,35 +101,35 @@ async function modelPanel(userId) {
   const { choices, page, pageCount } = modelChoices(models, shown, query, modelPages.get(userId) ?? 0);
   modelPages.set(userId, page);
   const embed = new EmbedBuilder()
-    .setTitle('🧠 LLM 設定')
+    .setTitle(t(userLang(userId), 'panel.title'))
     .setColor(0x5865f2)
     .addFields(
-      { name: 'model', value: '`' + shown + '`' + (stagedModel ? ' *(未適用)*' : ''), inline: true },
-      { name: 'effort', value: shownEffort + (stagedEffort ? ' *(未適用)*' : ''), inline: true },
+      { name: 'model', value: '`' + shown + '`' + (stagedModel ? t(userLang(userId), 'panel.unapplied') : ''), inline: true },
+      { name: 'effort', value: shownEffort + (stagedEffort ? t(userLang(userId), 'panel.unapplied') : ''), inline: true },
       { name: 'provider', value: config.llm.provider, inline: true },
     )
-    .setFooter({ text: `${models.length} models (${catalog.source}) / ${page + 1}/${pageCount} ページ / 個人設定` });
-  if (catalog.error) embed.addFields({ name: 'モデル一覧', value: catalog.error });
-  if (query) embed.addFields({ name: '検索', value: query.slice(0, 100) });
+    .setFooter({ text: t(userLang(userId), 'panel.footer', { count: models.length, source: catalog.source, page: page + 1, pages: pageCount }) });
+  if (catalog.error) embed.addFields({ name: t(userLang(userId), 'panel.modelList'), value: catalog.error });
+  if (query) embed.addFields({ name: t(userLang(userId), 'panel.searchBtn'), value: query.slice(0, 100) });
   const modelMenu = new StringSelectMenuBuilder()
     .setCustomId('model_sel')
-    .setPlaceholder('モデルを選択 (' + choices.length + ')')
+    .setPlaceholder(t(userLang(userId), 'panel.pickModel', { n: choices.length }))
     .addOptions(choices.map(v => ({ label: v.slice(0, 100), value: v, default: v === shown })));
   const effortMenu = new StringSelectMenuBuilder()
     .setCustomId('effort_sel')
-    .setPlaceholder('Reasoning effort')
+    .setPlaceholder(t(userLang(userId), 'panel.effort'))
     .addOptions(
       { label: 'default', value: 'default', default: shownEffort === 'default' },
       { label: 'low', value: 'low', default: shownEffort === 'low' },
       { label: 'medium', value: 'medium', default: shownEffort === 'medium' },
       { label: 'high', value: 'high', default: shownEffort === 'high' },
     );
-  const applyBtn = new ButtonBuilder().setCustomId('model_apply').setLabel('決定').setStyle(ButtonStyle.Success);
-  const customBtn = new ButtonBuilder().setCustomId('model_custom').setLabel('自由入力').setStyle(ButtonStyle.Secondary);
-  const resetBtn = new ButtonBuilder().setCustomId('model_reset').setLabel('リセット').setStyle(ButtonStyle.Danger);
-  const prevBtn = new ButtonBuilder().setCustomId('model_prev').setLabel('前へ').setStyle(ButtonStyle.Secondary).setDisabled(page === 0);
-  const nextBtn = new ButtonBuilder().setCustomId('model_next').setLabel('次へ').setStyle(ButtonStyle.Secondary).setDisabled(page + 1 >= pageCount);
-  const searchBtn = new ButtonBuilder().setCustomId('model_search').setLabel('検索').setStyle(ButtonStyle.Secondary);
+  const applyBtn = new ButtonBuilder().setCustomId('model_apply').setLabel(t(userLang(userId), 'panel.apply')).setStyle(ButtonStyle.Success);
+  const customBtn = new ButtonBuilder().setCustomId('model_custom').setLabel(t(userLang(userId), 'panel.custom')).setStyle(ButtonStyle.Secondary);
+  const resetBtn = new ButtonBuilder().setCustomId('model_reset').setLabel(t(userLang(userId), 'panel.reset')).setStyle(ButtonStyle.Danger);
+  const prevBtn = new ButtonBuilder().setCustomId('model_prev').setLabel(t(userLang(userId), 'panel.prev')).setStyle(ButtonStyle.Secondary).setDisabled(page === 0);
+  const nextBtn = new ButtonBuilder().setCustomId('model_next').setLabel(t(userLang(userId), 'panel.next')).setStyle(ButtonStyle.Secondary).setDisabled(page + 1 >= pageCount);
+  const searchBtn = new ButtonBuilder().setCustomId('model_search').setLabel(t(userLang(userId), 'panel.searchBtn')).setStyle(ButtonStyle.Secondary);
   return {
     embeds: [embed],
     components: [
@@ -173,9 +177,9 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
 
   if (a.kind === 'computer') {
     const task = String(arg ?? '').trim();
-    if (privateComputer && !computerChannel) return 'DMを開けなかったため、非公開のブラウザ作業を開始できませんでした';
+    if (privateComputer && !computerChannel) return t(userLang(userId), 'x.dmFail');
     const target = computerChannel ?? channel;
-    if (!target?.send) return 'ブラウザ作業の結果を通知できるチャンネルがありません';
+    if (!target?.send) return t(userLang(userId), 'x.noChannel');
     return startComputerTask({
       userId, task, channel: target,
       onDone: async (outcome, result) => {
@@ -184,7 +188,7 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
         if (learned?.promoted) {
           try {
             const user = await client.users.fetch(userId);
-            await user.send(`🔁 「${learned.candidate.name}」を繰り返す作業として覚えました。次から「もう一度やって」で呼び出せます。手順は入力値や認証コードを含めず、毎回画面を確認します。`);
+            await user.send(t(userLang(userId), 'x.learned', { name: learned.candidate.name }));
           } catch {}
         }
       },
@@ -193,31 +197,31 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
 
   if (a.kind === 'specialty_save') {
     const definition = specialtyDefinitionFromArg(store, userId, arg);
-    if (!definition) return 'Specialtyの名前と手順を指定してください';
+    if (!definition) return t(userLang(userId), 'x.specNeed');
     store.saveSpecialty(userId, definition.name, definition.instructions, definition.interval_days);
     await homeRefresh();
-    return `🔁 Specialty「${definition.name}」を覚えました${definition.interval_days ? `。${definition.interval_days}日後に再実行を提案します` : ''}`;
+    return t(userLang(userId), 'x.specSaved', { name: definition.name, interval: definition.interval_days ? t(userLang(userId), 'x.specInterval', { days: definition.interval_days }) : '' });
   }
   if (a.kind === 'specialty_list') {
     const list = store.listSpecialties(userId);
-    return list.length ? '🔁 覚えている作業:\n' + list.map(s => `#${s.id} ${s.name}${s.interval_days ? ` (${s.interval_days}日ごとに提案)` : ''}`).join('\n').slice(0, 1700)
-      : '覚えているSpecialtyはありません。チャットでやり方を教えて「この手順を覚えて」と頼めます';
+    return list.length ? t(userLang(userId), 'x.specList', { list: '' }) + list.map(s => `#${s.id} ${s.name}${s.interval_days ? t(userLang(userId), 'x.specListInterval', { days: s.interval_days }) : ''}`).join('\n').slice(0, 1700)
+      : t(userLang(userId), 'x.specNone');
   }
   if (a.kind === 'specialty_del') {
     const key = String(arg ?? '').trim();
     const hit = /^\d+$/.test(key) ? store.getSpecialty(userId, Number(key)) : store.findSpecialty(userId, key);
-    if (!hit) return 'そのSpecialtyは見つかりませんでした';
+    if (!hit) return t(userLang(userId), 'x.specNotFound');
     store.deleteSpecialty(userId, hit.id);
     await homeRefresh();
-    return `🗑️ Specialty「${hit.name}」を削除しました`;
+    return t(userLang(userId), 'x.specDeleted', { name: hit.name });
   }
   if (a.kind === 'specialty_run') {
     const key = String(arg ?? '').trim();
     const hit = /^\d+$/.test(key) ? store.getSpecialty(userId, Number(key)) : store.findSpecialty(userId, key);
-    if (!hit) return 'そのSpecialtyは見つかりませんでした';
-    if (privateComputer && !computerChannel) return 'DMを開けなかったため、非公開のブラウザ作業を開始できませんでした';
+    if (!hit) return t(userLang(userId), 'x.specNotFound');
+    if (privateComputer && !computerChannel) return t(userLang(userId), 'x.dmFail');
     const target = computerChannel ?? channel;
-    if (!target?.send) return 'ブラウザ作業の結果を通知できるチャンネルがありません';
+    if (!target?.send) return t(userLang(userId), 'x.noChannel');
     return startComputerTask({ userId, task: specialtyTask(hit), channel: target,
       onDone: (outcome, result) => {
         if (scope) recordComputerOutcome(userId, scope, hit.name, outcome);
@@ -228,34 +232,34 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
 
   if (a.kind === "remind") {
     const due = parseWhen(String(arg ?? ""));
-    if (!due) return "日時を解釈できませんでした。日時を添えて言い直してください。";
+    if (!due) return t(userLang(userId), 'x.remindBadWhen');
     const id = store.addReminder(userId, channel?.id ?? null, a.label, due);
-    return `⏰ リマインダー #${id}: 「${a.label}」→ ${fmtTs(due)}`;
+    return t(userLang(userId), 'x.remindSet', { id, label: a.label, when: fmtTs(due) });
   }
   if (a.kind === "remind_del") {
-    if (!norm(arg)) return "取り消すリマインダーのIDまたは本文の一部を指定してください";
+    if (!norm(arg)) return t(userLang(userId), 'x.remindNeed');
     const rs = store.listReminders(userId);
     const hit = rs.find(r => String(r.id) === String(arg ?? "").trim()) ?? rs.find(r => norm(r.text).includes(norm(arg)));
-    if (!hit) return `リマインダー「${arg}」は見つかりませんでした`;
+    if (!hit) return t(userLang(userId), 'x.remindNotFound', { arg });
     store.cancelReminder(userId, hit.id);
-    return `🗑️ リマインダー「${hit.text}」を取り消しました`;
+    return t(userLang(userId), 'x.remindDeleted', { text: hit.text });
   }
   if (a.kind === "memory") {
     store.addMemory(userId, String(arg ?? a.label));
-    return `🧠 記憶しました: ${arg ?? a.label}`;
+    return t(userLang(userId), 'x.memorySaved', { text: arg ?? a.label });
   }
   if (a.kind === "memory_del") {
-    if (!norm(arg)) return "削除する記憶のIDまたは内容の一部を指定してください";
+    if (!norm(arg)) return t(userLang(userId), 'x.memoryNeed');
     const ms = store.listMemories(userId);
     const hit = ms.find(m => String(m.id) === String(arg ?? "").trim()) ?? ms.find(m => norm(m.content).includes(norm(arg)));
-    if (!hit) return `記憶「${arg}」は見つかりませんでした`;
+    if (!hit) return t(userLang(userId), 'x.memoryNotFound', { arg });
     store.deleteMemory(userId, hit.id);
-    return `🗑️ 記憶を削除しました: ${String(hit.content).slice(0, 60)}`;
+    return t(userLang(userId), 'x.memoryDeleted', { text: String(hit.content).slice(0, 60) });
   }
   if (a.kind === "home_card") {
     let c = {};
     try { c = JSON.parse(arg ?? "{}"); } catch {}
-    if (!c.title || !c.prompt) return "カード定義が壊れています";
+    if (!c.title || !c.prompt) return t(userLang(userId), 'x.cardBad');
     const ops = Array.isArray(c.ops) ? JSON.stringify(c.ops.filter(o => typeof o === 'string').slice(0, 4)) : null;
     const btns = Array.isArray(c.buttons)
       ? JSON.stringify(c.buttons.filter(b => b?.label && b?.prompt)
@@ -263,15 +267,15 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
       : null;
     store.addHomeCard(userId, String(c.title).slice(0, 60), String(c.prompt).slice(0, 500), c.emoji ?? null, c.color ?? null, ops, btns);
     await homeRefresh();
-    return `🏠 Homeにカード「${c.title}」を追加しました`;
+    return t(userLang(userId), 'x.cardAdded', { title: c.title });
   }
   if (a.kind === "home_card_upd") {
     let c = {};
     try { c = JSON.parse(arg ?? "{}"); } catch {}
     const cards = store.listHomeCards(userId);
-    if (!norm(c.target ?? c.title ?? "")) return "更新するカード名を target で指定してください";
+    if (!norm(c.target ?? c.title ?? "")) return t(userLang(userId), 'x.cardNeedTarget');
     const hit = cards.find(x => norm(x.title).includes(norm(c.target ?? c.title ?? "")));
-    if (!hit) return `カード「${c.target ?? c.title}」が見つかりませんでした`;
+    if (!hit) return t(userLang(userId), 'x.cardNotFound', { title: c.target ?? c.title });
     const upd = {
       title: c.new_title ? String(c.new_title).slice(0, 60) : hit.title,
       prompt: c.prompt ? String(c.prompt).slice(0, 500) : hit.prompt,
@@ -289,47 +293,47 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
     };
     store.updHomeCard(userId, hit.id, upd);
     await homeRefresh();
-    return `🏠 カード「${upd.title}」を更新しました`;
+    return t(userLang(userId), 'x.cardUpdated', { title: upd.title });
   }
   if (a.kind === "home_card_del") {
-    if (!norm(arg)) return "削除するカード名の一部を指定してください";
+    if (!norm(arg)) return t(userLang(userId), 'x.cardNeedArg');
     const cards = store.listHomeCards(userId);
     const hit = cards.find(c => norm(c.title).includes(norm(arg)));
-    if (!hit) return `カード「${arg}」は見つかりませんでした`;
+    if (!hit) return t(userLang(userId), 'x.cardNotFound', { title: arg });
     store.delHomeCard(userId, hit.id);
     await homeRefresh();
-    return `🗑️ Homeからカード「${hit.title}」を削除しました`;
+    return t(userLang(userId), 'x.cardDeleted', { title: hit.title });
   }
   if (a.kind === "home_off") {
     store.clearHome(userId);
-    return '🏠 Homeを解除しました(自動更新を停止。メッセージ自体は残ります)';
+    return t(userLang(userId), 'x.homeOff');
   }
   if (a.kind === "project") {
     const topic = String(arg ?? a.label).slice(0, 90);
     if (!channel?.threads || channel.type !== ChannelType.GuildText) {
-      return "スレッドを作れません。サーバーのテキストチャンネルで実行してください";
+      return t(userLang(userId), 'x.noThread');
     }
     const thread = await channel.threads.create({ name: `pj-${topic}`, autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek });
     store.addPanel(thread.id, userId, topic);
-    await thread.send(`📁 プロジェクト「${topic}」。<@${userId}> との会話をここに記録します。はじめの一言をどうぞ。`);
-    return `📁 プロジェクトを作成しました: ${thread}`;
+    await thread.send(t(userLang(userId), 'x.projIntro', { topic, userId }));
+    return t(userLang(userId), 'x.projCreated', { thread });
   }
   if (a.kind === "location") {
-    const g = await geocodeCity(String(arg ?? ""));
-    if (!g) return `📍 「${arg}」が見つかりませんでした`;
+    const g = await geocodeCity(String(arg ?? ""), userLang(userId));
+    if (!g) return t(userLang(userId), 'x.geoNotFound', { arg });
     const city = `${g.name}, ${g.country_code ?? ""}`;
     store.setHomeCity(userId, city, g.latitude, g.longitude);
     await homeRefresh();
-    return `📍 地域を「${city}」に設定しました`;
+    return t(userLang(userId), 'x.geoSet', { city });
   }
   if (a.kind === "brief") {
     let b = {};
     try { b = JSON.parse(arg ?? "{}"); } catch {}
-    if (b.off) { store.upsertSettings(userId, 0, "08:00", null); return "☀️ モーニングブリーフを停止しました"; }
+    if (b.off) { store.upsertSettings(userId, 0, "08:00", null); return t(userLang(userId), 'x.briefOff'); }
     const time = String(b.time ?? "").trim();
-    if (!/^\d{1,2}:\d{2}$/.test(time)) return "時刻は HH:MM 形式で指定してください";
+    if (!/^\d{1,2}:\d{2}$/.test(time)) return t(userLang(userId), 'x.briefBadTime');
     store.upsertSettings(userId, 1, time, channel?.id ?? null);
-    return `☀️ モーニングブリーフを毎日 ${time} にこのチャンネルへ送ります`;
+    return t(userLang(userId), 'x.briefSet', { time });
   }
   if (a.kind === "model") {
     let m = {};
@@ -338,48 +342,46 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
     if (m.effort) store.setEffort(userId, m.effort === "default" ? null : String(m.effort));
     if (m.model || m.effort) await invalidateUserAgents(userId);
     const s = store.getSettings(userId) ?? {};
-    return `⚙️ モデル設定を更新しました: ${s.model ?? config.llm.model} / effort=${s.effort ?? "default"}`;
+    return t(userLang(userId), 'x.modelSet', { model: s.model ?? config.llm.model, effort: s.effort ?? 'default' });
   }
   if (a.kind === "connect") {
     const key = providerKey(arg ?? a.label);
     const p = PROVIDERS[key];
-    if (!p) return '未対応のサービスです（対応: ' + Object.keys(PROVIDERS).join('/') + '）';
-    if (!p.configured()) return p.name + ' はこのBotで未設定です（管理者が .env にクライアントIDを入れる必要があります）';
-    if (p.connected(userId)) return p.name + ' はすでに接続済みです';
+    if (!p) return t(userLang(userId), 'x.svcUnsupported', { list: Object.keys(PROVIDERS).join('/') });
+    if (!p.configured()) return t(userLang(userId), 'x.svcNotConfigured', { name: p.name });
+    if (p.connected(userId)) return t(userLang(userId), 'x.svcAlready', { name: p.name });
     if (key === 'google') {
       const state = randomBytes(8).toString('hex');
       connectStates.set(state, { userId, provider: 'google', expires: Date.now() + 10 * 60_000 });
       const url = google.authUrl(state);
       return {
-        content: '🔗 **' + p.name + ' を接続**\n1. このリンクを開いて許可\n' + url
-          + '\n2. 「このサイトにアクセスできません」と出たらアドレスバーのURLをコピー\n3. 下のボタンを押してURLを貼る',
+        content: t(userLang(userId), 'x.connectGoogle', { name: p.name, url }),
         components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('concode:google').setLabel('コードを入力').setEmoji('🔑').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('concode:google').setLabel(t(userLang(userId), 'x.connectCode')).setEmoji('🔑').setStyle(ButtonStyle.Primary),
         )],
       };
     }
     if (key === 'm365') {
       const flow = await m365.startDeviceFlow();
-      const msg = '🔗 **' + p.name + ' を接続**\n' + (flow.message ?? '')
-        + '\n\n👉 ' + (flow.verification_uri ?? 'https://microsoft.com/devicelogin') + ' でコード \`' + flow.user_code + '\` を入力（スマホからOK）';
+      const msg = t(userLang(userId), 'x.connectM365', { name: p.name, message: flow.message ?? '', uri: flow.verification_uri ?? 'https://microsoft.com/devicelogin', code: flow.user_code });
       m365.pollDeviceFlow(userId, flow, channel)
-        .then(res => channel?.send(res ? '✅ ' + p.name + ' を接続しました: ' + (res.email || '') : '⏱️ ' + p.name + ' の接続がタイムアウト/拒否されました').catch(() => {}))
+        .then(res => channel?.send(res ? t(userLang(userId), 'x.connected', { name: p.name, email: res.email || '' }) : t(userLang(userId), 'x.connectTimeout', { name: p.name })).catch(() => {}))
         .catch(() => {});
       return msg;
     }
-    return '未対応の接続方式です';
+    return t(userLang(userId), 'x.connectBadFlow');
   }
   if (a.kind === "disconnect") {
     const key = providerKey(arg ?? a.label);
     const p = PROVIDERS[key];
-    if (!p) return '未対応のサービスです';
+    if (!p) return t(userLang(userId), 'x.svcUnsupported', { list: Object.keys(PROVIDERS).join('/') });
     p.disconnect(userId);
-    return '🔌 ' + p.name + ' を切断しました';
+    return t(userLang(userId), 'x.disconnected', { name: p.name });
   }
   if (a.kind === "service") {
     return await runOp(userId, String(arg ?? a.label ?? ''));
   }
-  return "未対応のアクションです。";
+  return t(userLang(userId), 'act.unsupported');
 }
 
 function providerKey(v) {
@@ -406,37 +408,50 @@ async function runAction(interaction, action) {
 // ---------- command handlers ----------
 
 const handlers = {
+  async language(i) {
+    const value = i.options.getString('code')?.trim();
+    if (value) {
+      const tag = value.toLowerCase() === 'auto' ? null : languageTag(value);
+      if (!tag && value.toLowerCase() !== 'auto') return i.reply({ content: t(userLang(i.user.id, { locale: i.locale }), 'generic.languageTag'), flags: MessageFlags.Ephemeral });
+      store.setLang(i.user.id, tag);
+      if (!tag) noteLocale(i.user.id, i.locale);
+      await invalidateUserAgents(i.user.id);
+    }
+    const lang = userLang(i.user.id, { locale: i.locale });
+    const tag = store.getSettings(i.user.id)?.lang;
+    return i.reply({ content: t(lang, value ? (tag ? 'lang.done' : 'lang.auto') : 'lang.current', { name: LANG_NAMES[tag || lang] || tag }), flags: MessageFlags.Ephemeral });
+  },
   async model(i) {
     await i.deferReply({ flags: MessageFlags.Ephemeral });
     await i.editReply(await modelPanel(i.user.id));
   },
 
   async reset(i) {
-    if (!resetAllowed(i)) return i.reply({ content: 'このテスト用コマンドは対象サーバーの管理者だけが使えます。', flags: MessageFlags.Ephemeral });
-    if (computerIsBusy()) return i.reply({ content: 'Computer Useの作業を止めてから実行してください。', flags: MessageFlags.Ephemeral });
+    if (!resetAllowed(i)) return i.reply({ content: t(userLang(i.user.id), 'reset.denied'), flags: MessageFlags.Ephemeral });
+    if (computerIsBusy()) return i.reply({ content: t(userLang(i.user.id), 'reset.busy'), flags: MessageFlags.Ephemeral });
     const { category, channels, threads } = await resetTargets(i.guild);
     pendingResets.set(i.guildId, { userId: i.user.id, expires: Date.now() + 2 * 60_000 });
-    const targets = category ? `カテゴリ「${category.name}」と配下${channels.length}チャンネル` : 'Harklet管理カテゴリは見つかりません';
+    const targets = category ? t(userLang(i.user.id), 'reset.targets', { name: category.name, count: channels.length }) : t(userLang(i.user.id), 'reset.noCategory');
     return i.reply({
-      content: `⚠️ **テスト用リセット**\n削除対象: ${targets}、Harkletのプロジェクトスレッド${threads.length}件、**Harklet DBの全データ（全ユーザーの記憶・設定・ログイン情報を含む）**。ブラウザVMのCookieは残ります。\n2分以内に実行ボタンを押すと削除します。`,
+      content: t(userLang(i.user.id), 'reset.confirm', { targets, threads: threads.length }),
       components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('reset_confirm:' + i.guildId).setLabel('リセットを実行').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('reset_cancel:' + i.guildId).setLabel('中止').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('reset_confirm:' + i.guildId).setLabel(t(userLang(i.user.id), 'reset.go')).setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('reset_cancel:' + i.guildId).setLabel(t(userLang(i.user.id), 'reset.cancel')).setStyle(ButtonStyle.Secondary),
       )],
       flags: MessageFlags.Ephemeral,
     });
   },
 
   async start(i) {
-    if (!i.guildId) return i.reply({ content: 'サーバー内で実行してください。', flags: MessageFlags.Ephemeral });
+    if (!i.guildId) return i.reply({ content: t(userLang(i.user.id), 'generic.inGuild'), flags: MessageFlags.Ephemeral });
     if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-      return i.reply({ content: 'セットアップには「サーバー管理」権限が必要です。', flags: MessageFlags.Ephemeral });
+      return i.reply({ content: t(userLang(i.user.id), 'generic.manageGuild'), flags: MessageFlags.Ephemeral });
     }
     await i.deferReply();
     try {
       const botMember = i.guild.members.me ?? await i.guild.members.fetchMe();
       if (!botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-        return i.editReply('❌ Botに「チャンネル管理」権限が必要です。招待URLの permissions は 3197968 が必要です(README参照)。');
+        return i.editReply(t(userLang(i.user.id), 'start.needManageChannels'));
       }
       const categoryId = store.getManagedCategory(i.guildId);
       let cat = categoryId ? await i.guild.channels.fetch(categoryId).catch(() => null) : null;
@@ -458,44 +473,44 @@ const handlers = {
         store.setHome(i.user.id, homeCh.id, m.id);
       }
       if (projCh.lastMessageId == null) await projCh.send({
-        content: '📁 **プロジェクト** — 話題ごとの会話スレッド。\n下のボタンか、チャットで頼んで新しいプロジェクトを作成します。',
+        content: t(userLang(i.user.id), 'start.projBody'),
         components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('proj_new').setLabel('新規プロジェクト').setEmoji('➕').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('proj_new').setLabel(t(userLang(i.user.id), 'start.projNew')).setEmoji('➕').setStyle(ButtonStyle.Primary),
         )],
       });
-      return i.editReply(`📍 セットアップしました: 💬<#${main.id}> / 🏠<#${homeCh.id}> / 📁<#${projCh.id}>\nchat への書き込みはそのまま会話になります。home は30分ごとに自動更新。`);
+      return i.editReply(t(userLang(i.user.id), 'start.done', { main: main.id, home: homeCh.id, proj: projCh.id }));
     } catch (e) {
-      return i.editReply('❌ セットアップに失敗: ' + e.message);
+      return i.editReply(t(userLang(i.user.id), 'start.fail', { msg: e.message }));
     }
   },
 
   async main(i) {
     const sub = i.options.getSubcommand();
-    if (!i.guildId) return i.reply({ content: 'サーバー内で実行してください。', flags: MessageFlags.Ephemeral });
+    if (!i.guildId) return i.reply({ content: t(userLang(i.user.id), 'generic.inGuild'), flags: MessageFlags.Ephemeral });
     if (sub === 'set') {
       if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-        return i.reply({ content: 'メインチャンネルの設定には「サーバー管理」権限が必要です。', flags: MessageFlags.Ephemeral });
+        return i.reply({ content: t(userLang(i.user.id), 'generic.manageGuild'), flags: MessageFlags.Ephemeral });
       }
       const main = i.options.getChannel('channel') ?? i.channel;
-      if (main?.type !== ChannelType.GuildText) return i.reply({ content: 'テキストチャンネルを指定してください。', flags: MessageFlags.Ephemeral });
+      if (main?.type !== ChannelType.GuildText) return i.reply({ content: t(userLang(i.user.id), 'main.needText'), flags: MessageFlags.Ephemeral });
       const botMember = i.guild.members.me ?? await i.guild.members.fetchMe();
       const botPermissions = main.permissionsFor(botMember);
       if (!botPermissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory])) {
-        return i.reply({ content: 'Botがそのチャンネルを閲覧・投稿できる権限を付けてください。', flags: MessageFlags.Ephemeral });
+        return i.reply({ content: t(userLang(i.user.id), 'main.needPerms'), flags: MessageFlags.Ephemeral });
       }
       store.setMain(i.guildId, main.id, i.user.id);
-      return i.reply({ content: `📍 メインチャンネルを <#${main.id}> に設定しました。` });
+      return i.reply({ content: t(userLang(i.user.id), 'main.setDone', { id: main.id }) });
     }
     if (sub === 'off') {
       if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-        return i.reply({ content: '「サーバー管理」権限が必要です。', flags: MessageFlags.Ephemeral });
+        return i.reply({ content: t(userLang(i.user.id), 'generic.manageGuild'), flags: MessageFlags.Ephemeral });
       }
       store.clearMain(i.guildId);
-      return i.reply({ content: '📍 メインチャンネル設定を解除しました(チャンネル自体は残ります)' });
+      return i.reply({ content: t(userLang(i.user.id), 'main.offDone') });
     }
     const ch = store.getMain(i.guildId);
     const pj = store.getProjectChannel(i.guildId);
-    const parts = [`📍 メイン: ${ch ? `<#${ch}>` : '未設定'}`, `📁 プロジェクト: ${pj ? `<#${pj}>` : '未設定'}`];
+    const parts = [t(userLang(i.user.id), 'main.show', { main: ch ? `<#${ch}>` : t(userLang(i.user.id), 'main.unset'), proj: pj ? `<#${pj}>` : t(userLang(i.user.id), 'main.unset') })];
     return i.reply({ content: parts.join(' / '), flags: MessageFlags.Ephemeral });
   },
 
@@ -505,16 +520,16 @@ const handlers = {
       const ms = store.listMemories(i.user.id);
       const body = ms.length
         ? ms.map(m => `#${m.id} ${m.content}`).join('\n')
-        : 'まだ記憶はありません。チャットで「これを覚えて」と頼むこともできます。';
+        : t(userLang(i.user.id), 'mem.none');
       return i.reply({ content: body.slice(0, 1900), flags: MessageFlags.Ephemeral });
     }
     if (sub === 'forget') {
       const ok = store.deleteMemory(i.user.id, i.options.getInteger('id', true));
-      return i.reply({ content: ok ? '🗑️ 削除しました。' : 'そのIDの記憶は見つかりません。', flags: MessageFlags.Ephemeral });
+      return i.reply({ content: ok ? t(userLang(i.user.id), 'mem.deleted') : t(userLang(i.user.id), 'mem.notFound'), flags: MessageFlags.Ephemeral });
     }
     if (sub === 'clear') {
       for (const m of store.listMemories(i.user.id)) store.deleteMemory(i.user.id, m.id);
-      return i.reply({ content: '🗑️ すべての記憶を削除しました。', flags: MessageFlags.Ephemeral });
+      return i.reply({ content: t(userLang(i.user.id), 'mem.cleared'), flags: MessageFlags.Ephemeral });
     }
   },
 
@@ -522,8 +537,8 @@ const handlers = {
     const sub = i.options.getSubcommand();
     if (sub === 'list') {
       const lines = providerStatus(i.user.id);
-      const txt = lines.length ? '🔗 接続状況\n' + lines.map(l => '- ' + l).join('\n')
-        : '外部サービスが未設定です（管理者が .env に GOOGLE_CLIENT_ID / M365_CLIENT_ID を入れると使えます）';
+      const txt = lines.length ? t(userLang(i.user.id), 'svc.status') + '\n' + lines.map(l => '- ' + l).join('\n')
+        : t(userLang(i.user.id), 'svc.none');
       return i.reply({ content: txt, flags: MessageFlags.Ephemeral });
     }
     const provider = i.options.getString('provider', true);
@@ -541,7 +556,7 @@ const handlers = {
 async function deliverReminders() {
   for (const r of store.dueReminders(Date.now())) {
     try {
-      const msg = `⏰ <@${r.user_id}> リマインダー: **${r.text}**`;
+      const msg = t(userLang(r.user_id), 'sched.reminder', { userId: r.user_id, text: r.text });
       if (r.channel_id) {
         const ch = await client.channels.fetch(r.channel_id).catch(() => null);
         if (ch?.isSendable()) { await ch.send(msg); store.markDelivered(r.id); continue; }
@@ -561,9 +576,9 @@ async function buildBrief(userId) {
   const rs = store.listReminders(userId);
   const lines = rs.slice(0, 10).map(r => `- ${r.text} (${fmtTs(r.due_at)})`);
   const prompt = `今日のモーニングブリーフを書いて。ユーザーの予定・記憶を踏まえて短く励ます一文と、今日のリマインダー一覧(あれば)を含める。リマインダー: ${rs.length ? rs.map(r => `${r.text}@${new Date(r.due_at).toISOString()}`).join(', ') : 'なし'}`;
-  const scope = `u:${userId}`;
-  const result = await chatDsh(userId, scope, prompt).catch(e => ({ reply: `ブリーフ生成に失敗: ${e.message}` }));
-  return result.reply + (lines.length ? '\n\n**今日のリマインダー**\n' + lines.join('\n') : '');
+  const scope = `brief:${userId}`;
+  const result = await chatDsh(userId, scope, prompt).catch(e => ({ reply: t(userLang(userId), 'sched.briefFail', { msg: e.message }) }));
+  return result.reply + (lines.length ? '\n\n' + t(userLang(userId), 'sched.briefToday') + '\n' + lines.join('\n') : '');
 }
 
 async function sendBriefs() {
@@ -609,8 +624,8 @@ async function sendDueSpecialties() {
       try {
         const user = await client.users.fetch(specialty.user_id);
         await user.send({
-          content: `🔁 **${specialty.name}** をそろそろ繰り返す時期です。実行しますか？`,
-          components: actionRows(specialty.user_id, [{ kind: 'specialty_run', arg: String(specialty.id), label: '作業を始める' }]),
+          content: t(userLang(specialty.user_id), 'sched.specDue', { name: specialty.name }),
+          components: actionRows(specialty.user_id, [{ kind: 'specialty_run', arg: String(specialty.id), label: t(userLang(specialty.user_id), 'sched.specRun') }]),
         });
         store.markSpecialtySuggested(specialty.user_id, specialty.id);
       } catch (err) { console.warn('specialty suggestion unavailable:', err.message); }
@@ -621,6 +636,7 @@ async function sendDueSpecialties() {
 // ---------- events ----------
 
 async function sendAgentReply(message, scope, text = message.content) {
+  noteAutoLang(message.author.id, message.content);
   // typing indicator: expires in ~10s, resend every 8s until reply completes
   const typing = setInterval(() => message.channel.sendTyping().catch(() => {}), 8000);
   message.channel.sendTyping().catch(() => {});
@@ -642,7 +658,7 @@ async function sendAgentReply(message, scope, text = message.content) {
       if (r) await message.reply(asReply(r)).catch(() => {});
     }
   } catch (e) {
-    await message.reply('⚠️ エラー: ' + e.message).catch(() => {});
+    await message.reply(t(userLang(message.author.id), 'generic.error', { msg: e.message })).catch(() => {});
   } finally {
     clearInterval(typing);
   }
@@ -650,45 +666,46 @@ async function sendAgentReply(message, scope, text = message.content) {
 function attachEvents(client) {
 
 client.on('interactionCreate', async (interaction) => {
+  noteLocale(interaction.user.id, interaction.locale);
   if (await handleComputerInteraction(interaction)) return;
   try {
     if (interaction.isChatInputCommand()) {
       const h = handlers[interaction.commandName];
       if (h) await h(interaction);
     } else if (interaction.isButton() && /^reset_(confirm|cancel):/.test(interaction.customId)) {
-      if (!resetAllowed(interaction)) return interaction.reply({ content: '管理者のみ実行できます。', flags: MessageFlags.Ephemeral });
+      if (!resetAllowed(interaction)) return interaction.reply({ content: t(userLang(interaction.user.id), 'reset.adminOnly'), flags: MessageFlags.Ephemeral });
       const [kind, guildId] = interaction.customId.split(':');
       const pending = pendingResets.get(guildId);
       if (!pending || pending.userId !== interaction.user.id || pending.expires < Date.now()) {
-        return interaction.reply({ content: '確認の有効期限が切れました。/reset からやり直してください。', flags: MessageFlags.Ephemeral });
+        return interaction.reply({ content: t(userLang(interaction.user.id), 'reset.expired'), flags: MessageFlags.Ephemeral });
       }
       pendingResets.delete(guildId);
-      if (kind === 'reset_cancel') return interaction.update({ content: 'リセットを中止しました。', components: [] });
-      if (resettingGuilds.has(guildId)) return interaction.reply({ content: 'リセットはすでに実行中です。', flags: MessageFlags.Ephemeral });
+      if (kind === 'reset_cancel') return interaction.update({ content: t(userLang(interaction.user.id), 'reset.cancelled'), components: [] });
+      if (resettingGuilds.has(guildId)) return interaction.reply({ content: t(userLang(interaction.user.id), 'reset.running'), flags: MessageFlags.Ephemeral });
       resettingGuilds.add(guildId);
-      await interaction.update({ content: 'HarkletのチャンネルとDBを削除しています…', components: [] });
+      await interaction.update({ content: t(userLang(interaction.user.id), 'reset.deleting'), components: [] });
       try {
         const result = await performReset(interaction);
         await interaction.editReply({ content: result }).catch(() => interaction.user.send(result).catch(() => {}));
       } finally { resettingGuilds.delete(guildId); }
     } else if (interaction.isButton() && interaction.customId.startsWith('act:')) {
       const a = store.getAction(Number(interaction.customId.slice(4)));
-      if (!a) return interaction.reply({ content: 'このアクションは期限切れです。', flags: MessageFlags.Ephemeral });
-      if (a.userId !== interaction.user.id) return interaction.reply({ content: 'このボタンは依頼した本人だけが使えます。', flags: MessageFlags.Ephemeral });
+      if (!a) return interaction.reply({ content: t(userLang(interaction.user.id), 'act.expired'), flags: MessageFlags.Ephemeral });
+      if (a.userId !== interaction.user.id) return interaction.reply({ content: t(userLang(interaction.user.id), 'act.notYours'), flags: MessageFlags.Ephemeral });
       await runAction(interaction, a.payload);
       store.delAction(Number(interaction.customId.slice(4)));
     } else if (interaction.isButton() && interaction.customId === 'model_custom') {
-      const modal = new ModalBuilder().setCustomId('model_modal').setTitle('モデルを自由入力');
+      const modal = new ModalBuilder().setCustomId('model_modal').setTitle(t(userLang(interaction.user.id), 'modal.modelTitle'));
       modal.addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('model_name')
-          .setLabel('モデル名 (例: openai/gpt-5, anthropic/claude-sonnet-4-5)')
+          .setLabel(t(userLang(interaction.user.id), 'modal.modelLabel'))
           .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100),
       ));
       await interaction.showModal(modal);
     } else if (interaction.isButton() && interaction.customId === 'model_search') {
-      const modal = new ModalBuilder().setCustomId('model_search_modal').setTitle('モデルを検索');
+      const modal = new ModalBuilder().setCustomId('model_search_modal').setTitle(t(userLang(interaction.user.id), 'modal.searchTitle'));
       modal.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('model_query').setLabel('モデルIDの一部（空欄で検索解除）')
+        new TextInputBuilder().setCustomId('model_query').setLabel(t(userLang(interaction.user.id), 'modal.searchLabel'))
           .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100)
           .setValue(modelQueries.get(interaction.user.id) ?? ''),
       ));
@@ -724,18 +741,18 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.deferUpdate();
       try { await interaction.message.edit(await homePayload(interaction.user.id, actionRows)); } catch {}
     } else if (interaction.isButton() && interaction.customId === 'proj_new') {
-      const modal = new ModalBuilder().setCustomId('proj_modal').setTitle('プロジェクト作成');
+      const modal = new ModalBuilder().setCustomId('proj_modal').setTitle(t(userLang(interaction.user.id), 'home.newProj'));
       modal.addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('proj_topic')
-          .setLabel('トピック(例: C2Bサイト改善)')
+          .setLabel(t(userLang(interaction.user.id), 'modal.projLabel'))
           .setStyle(TextInputStyle.Short).setRequired(true),
       ));
       await interaction.showModal(modal);
     } else if (interaction.isButton() && interaction.customId === 'concode:google') {
-      const modal = new ModalBuilder().setCustomId('conmodal:google').setTitle('Google接続コード');
+      const modal = new ModalBuilder().setCustomId('conmodal:google').setTitle(t(userLang(interaction.user.id), 'modal.googleTitle'));
       modal.addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('auth_input')
-          .setLabel('リダイレクト先URL(アドレスバーからコピー)')
+          .setLabel(t(userLang(interaction.user.id), 'modal.googleLabel'))
           .setStyle(TextInputStyle.Short).setRequired(true)
           .setPlaceholder('http://127.0.0.1/?code=...&state=...'),
       ));
@@ -744,13 +761,13 @@ client.on('interactionCreate', async (interaction) => {
       const [, cardId, idx] = interaction.customId.split(':');
       const card = store.getHomeCard(Number(cardId));
       if (!card || card.user_id !== interaction.user.id) {
-        return interaction.reply({ content: 'このカードは見つかりません', flags: MessageFlags.Ephemeral });
+        return interaction.reply({ content: t(userLang(interaction.user.id), 'card.notFound'), flags: MessageFlags.Ephemeral });
       }
       let btns = [];
       try { btns = JSON.parse(card.buttons ?? '[]'); } catch {}
       const btn = btns[Number(idx)];
       if (!btn?.prompt) {
-        return interaction.reply({ content: 'このボタンはもう使えません', flags: MessageFlags.Ephemeral });
+        return interaction.reply({ content: t(userLang(interaction.user.id), 'btn.dead'), flags: MessageFlags.Ephemeral });
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
@@ -766,21 +783,21 @@ client.on('interactionCreate', async (interaction) => {
           if (r) await interaction.followUp(asReply(r, true)).catch(() => {});
         }
       } catch (e) {
-        await interaction.editReply('⚠️ エラー: ' + e.message).catch(() => {});
+        await interaction.editReply(t(userLang(interaction.user.id), 'generic.error', { msg: e.message })).catch(() => {});
       }
    } else if (interaction.isButton() && interaction.customId === 'home_region') {
-      const modal = new ModalBuilder().setCustomId('home_region_modal').setTitle('地域を設定');
+      const modal = new ModalBuilder().setCustomId('home_region_modal').setTitle(t(userLang(interaction.user.id), 'modal.regionTitle'));
       modal.addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('region_city')
-          .setLabel('地名(例: 浦和 / Urawa / さいたま市)')
+          .setLabel(t(userLang(interaction.user.id), 'modal.regionLabel'))
           .setStyle(TextInputStyle.Short).setRequired(true),
       ));
       await interaction.showModal(modal);
     } else if (interaction.isButton() && interaction.customId === 'home_newproj') {
-      const modal = new ModalBuilder().setCustomId('home_proj_modal').setTitle('プロジェクト作成');
+      const modal = new ModalBuilder().setCustomId('home_proj_modal').setTitle(t(userLang(interaction.user.id), 'home.newProj'));
       modal.addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('proj_topic')
-          .setLabel('トピック(例: C2Bサイト改善)')
+          .setLabel(t(userLang(interaction.user.id), 'modal.projLabel'))
           .setStyle(TextInputStyle.Short).setRequired(true),
       ));
       await interaction.showModal(modal);
@@ -797,12 +814,12 @@ client.on('interactionCreate', async (interaction) => {
       if (st && (st.userId !== interaction.user.id || st.expires < Date.now())) st = null;
       if (stKey) connectStates.delete(stKey);
       if (!st && state) {
-        return interaction.reply({ content: '接続セッションの期限切れか、別ユーザーのURLです。もう一度 connect からやり直してください', flags: MessageFlags.Ephemeral });
+        return interaction.reply({ content: t(userLang(interaction.user.id), 'x.oauthExpired'), flags: MessageFlags.Ephemeral });
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
         const email = await google.exchangeCode(interaction.user.id, code);
-        await interaction.editReply('✅ Google Workspace を接続しました: ' + (email || ''));
+        await interaction.editReply(t(userLang(interaction.user.id), 'x.connected', { name: 'Google Workspace', email: email || '' }));
         const st2 = store.getSettings(interaction.user.id);
         if (st2?.home_message_id) {
           try {
@@ -831,34 +848,34 @@ client.on('interactionCreate', async (interaction) => {
       const topic = interaction.fields.getTextInputValue('proj_topic').trim();
       const ch = interaction.channel;
       if (!ch || ch.type !== ChannelType.GuildText) {
-        return interaction.reply({ content: 'テキストチャンネルで実行してください', flags: MessageFlags.Ephemeral });
+        return interaction.reply({ content: t(userLang(interaction.user.id), 'proj.needGuildText'), flags: MessageFlags.Ephemeral });
       }
       const thread = await ch.threads.create({ name: `pj-${topic.slice(0, 90)}`, autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek });
       store.addPanel(thread.id, interaction.user.id, topic);
-      await thread.send(`📁 プロジェクト「${topic}」。${interaction.user} との会話をここに記録します。はじめの一言をどうぞ。`);
-      await interaction.reply({ content: `📁 プロジェクトを作成しました: ${thread}`, flags: MessageFlags.Ephemeral });
+      await thread.send(t(userLang(interaction.user.id), 'x.projIntro', { topic, userId: interaction.user.id }));
+      await interaction.reply({ content: t(userLang(interaction.user.id), 'x.projCreated', { thread }), flags: MessageFlags.Ephemeral });
     } else if (interaction.isModalSubmit() && interaction.customId === 'home_region_modal') {
       const name = interaction.fields.getTextInputValue('region_city').trim();
       await interaction.deferUpdate();
-      const p = await geocodeCity(name);
+      const p = await geocodeCity(name, userLang(interaction.user.id));
       if (!p) {
-        await interaction.followUp({ content: `📍 「${name}」が見つかりませんでした。別の表記で試してください`, flags: MessageFlags.Ephemeral });
+        await interaction.followUp({ content: t(userLang(interaction.user.id), 'geo.retry', { name }), flags: MessageFlags.Ephemeral });
       } else {
         const city = `${p.name}, ${p.country_code ?? ''}`;
         store.setHomeCity(interaction.user.id, city, p.latitude, p.longitude);
-        await interaction.followUp({ content: `📍 地域を「${city}」に設定しました`, flags: MessageFlags.Ephemeral });
+        await interaction.followUp({ content: t(userLang(interaction.user.id), 'x.geoSet', { city }), flags: MessageFlags.Ephemeral });
       }
       try { await interaction.message.edit(await homePayload(interaction.user.id, actionRows)); } catch {}
     } else if (interaction.isModalSubmit() && interaction.customId === 'home_proj_modal') {
       const topic = interaction.fields.getTextInputValue('proj_topic').trim();
       const base = interaction.message;
       if (!base?.channel || base.channel.type !== ChannelType.GuildText) {
-        return interaction.reply({ content: 'ギルドのテキストチャンネルにあるHomeメッセージから実行してください', flags: MessageFlags.Ephemeral });
+        return interaction.reply({ content: t(userLang(interaction.user.id), 'proj.fromHome'), flags: MessageFlags.Ephemeral });
       }
       const thread = await base.startThread({ name: `pj-${topic.slice(0, 90)}`, autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek });
       store.addPanel(thread.id, interaction.user.id, topic);
-      await thread.send(`📁 プロジェクト「${topic}」。${interaction.user} との会話をここに記録します。はじめの一言をどうぞ。`);
-      await interaction.reply({ content: `📁 プロジェクトを作成しました: ${thread}`, flags: MessageFlags.Ephemeral });
+      await thread.send(t(userLang(interaction.user.id), 'x.projIntro', { topic, userId: interaction.user.id }));
+      await interaction.reply({ content: t(userLang(interaction.user.id), 'x.projCreated', { thread }), flags: MessageFlags.Ephemeral });
     } else if (interaction.isStringSelectMenu()) {
       await interaction.deferUpdate();
       if (interaction.customId === 'model_sel') {
@@ -870,7 +887,7 @@ client.on('interactionCreate', async (interaction) => {
     }
   } catch (e) {
     console.error(e);
-    const msg = { content: `⚠️ エラー: ${e.message}`, flags: MessageFlags.Ephemeral };
+    const msg = { content: t(userLang(interaction.user.id), 'generic.error', { msg: e.message }), flags: MessageFlags.Ephemeral };
     if (interaction.deferred || interaction.replied) await interaction.followUp(msg).catch(() => {});
     else await interaction.reply(msg).catch(() => {});
   }
@@ -948,4 +965,5 @@ async function login(withContent) {
   }
 }
 
-await login(true);
+export { handlers, modelPanel, execAction };
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await login(true);

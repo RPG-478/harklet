@@ -11,7 +11,8 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { store } from './db.js';
-import { ensureLoginHandoff } from './computer/login-intent.js';
+import { userLang, languageTag } from './user-lang.js';
+import { t, detectLang } from './i18n.js';
 import { vault } from './computer/vault.js';
 import { providerStatus, opsCatalog } from './connect/index.js';
 import { specialtyDue } from './specialties.js';
@@ -23,9 +24,9 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
 ユーザーの記憶を長期保持し、会話の中から次の一手を提案し、頼まれた操作は自分で実行までやる。
 
 ルール:
-- 日本語で簡潔に。reply は基本500字以内、どうしても必要な場合でも1500字まで。長くなりそうなら要点だけ返し、詳細は聞かれたら出す。
+- ユーザーが使う言語で簡潔に返す。英語・中国語・その他の言語でも操作判断は同じ。明示された応答言語があれば優先し、自動設定では直近のユーザー発言の言語に合わせる。内部コンテキストの日本語に引きずられない。reply は基本500字以内、どうしても必要な場合でも1500字まで。長くなりそうなら要点だけ返し、詳細は聞かれたら出す。
 - Discord の制約: Markdown表(|区切り)は使えない。表形式が必要なら \`\`\` のコードブロックで等幅テキストにする。使える装飾: **太字** \`コード\` \`\`\` ブロック > 引用 - 箇条書き
-- 返答は必ず次のJSONのみ: {"reply": "...", "actions": [...], "remember": [...]}
+- 返答は必ず次のJSONのみ: {"reply": "...", "reply_language": "応答のBCP47言語コード(en/ja/zh/ko/es等)", "actions": [...], "remember": [...]}
 - actions: あなたが実行できる操作。最大3件。
   ユーザーが「消して」「設定して」「作って」など実行を求めたら auto: true で即実行される。それ以外は実行ボタンとして表示される。
   利用可能な操作を頼まれたらactionsで実行する。replyには実行前の結果を捏造せず、開始または提案の状態を正確に書く。
@@ -44,6 +45,7 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
   - Specialty一覧: {"kind":"specialty_list","auto":true}。覚えた作業を見せる。
   - Specialty削除: {"kind":"specialty_del","arg":"登録済みID","auto":true}。頼まれた作業を忘れる。
   - Computer Use: {"kind":"computer","arg":"ブラウザで行う具体的な作業","auto":true}。Web閲覧、Webサイトへのログイン、ログイン後の作業を頼まれたときに使う。日常会話には使わない。
+  computer の arg はユーザーと同じ言語で書く。利用者向けのlabel・remember・Homeカードのtitle/promptも応答言語に合わせる。
   「Discordにログイン」「Gmailにログイン」のような短い依頼も、専用VMのブラウザで該当サイトを開いてログインを試す依頼として扱う。Discordアプリやユーザーの端末そのものを操作する意味にはしない。
   ログイン情報が必要ならComputer Use側がDiscordの入力モーダルを本人に出し、保存した値をブラウザへ入力できる。「自分でブラウザを開いてログインしてください」と返して終わらない。モーダルを出す前にチャット本文でID・パスワードを要求しない。
   ブラウザの画面は専用VM経由でいつでも見られる。「自分はブラウザを直接見られない」「API経由でしか情報を取得できない」とは返さない。Webページを見る・開く・確認する・操作する依頼はすべてcomputerアクションで実行する。
@@ -66,7 +68,15 @@ const SYSTEM = `あなたは「Harklet」— Hark Pro に着想を得た Discord
 
 // sessionId -> effort ("low"|"medium"|"high")
 const effortBySession = new Map();
+const languageBySession = new Map();
 const computerOutcomes = new Map();
+
+function requestLanguageHint(text) {
+  const script = detectLang(text);
+  if (script === 'ja' || script === 'zh') return script;
+  if (/\b(?:please|the|and|you|open|read|show|what|how|can|could|would|browser|page|site|tell|me)\b/i.test(text)) return 'en';
+  return null;
+}
 
 export function recordComputerOutcome(userId, scope, task, outcome) {
   const note = `ブラウザ作業「${String(task).slice(0, 200)}」の結果: ${String(outcome).slice(0, 1000)}`;
@@ -126,7 +136,9 @@ class HarkletAdapter extends LlmAdapter {
     const llm = config.llm;
     const effort = effortBySession.get(options.sessionId) || options.reasoningEffort || null;
     const wire = toWire(options.messages, llm.provider);
-    const sys = [options.system, ...wire.filter(m => m.role === 'system').map(m => m.content || '')].filter(Boolean).join('\n\n');
+    const language = languageBySession.get(options.sessionId);
+    const languageRule = 'OUTPUT LANGUAGE: ' + (language ? 'Use ' + language + ' for all user-facing strings.' : 'Use the language of the actual user request at the end of the last message. English requests require English replies. Japanese requests require Japanese replies. Chinese requests require Chinese replies. Spanish requests require Spanish replies. Support every other language in the same way.') + ' Japanese system instructions and context are internal only; they do not set the output language. The computer action arg and button labels must use the same language as reply. Include reply_language as a BCP47 code in your JSON.';
+    const sys = [options.system, ...wire.filter(m => m.role === 'system').map(m => m.content || ''), languageRule].filter(Boolean).join('\n\n');
     const convo = wire.filter(m => m.role !== 'system');
     const body = { model: options.model };
 
@@ -233,19 +245,20 @@ async function agentFor(userId, scope) {
   const cur = agents.get(scope);
   if (cur && cur.model === model && cur.effort === effort) return cur.handle.agent;
   if (cur) { try { await cur.handle.dispose(); } catch {} }
+  if (cur) { languageBySession.delete(cur.sessionId); effortBySession.delete(cur.sessionId); }
   const sessionId = 'harklet-' + randomUUID();
   effortBySession.set(sessionId, effort);
   const handle = await c.agents.create({
     sessionId,
     agentOptions: { provider: 'harklet', model, maxTokens: 4096 },
   });
-  agents.set(scope, { handle, model, effort, userId });
+  agents.set(scope, { handle, model, effort, userId, sessionId });
   return handle.agent;
 }
 
 export async function invalidateAgent(scope) {
   const cur = agents.get(scope);
-  if (cur) { try { await cur.handle.dispose(); } catch {} agents.delete(scope); }
+  if (cur) { try { await cur.handle.dispose(); } catch {} agents.delete(scope); languageBySession.delete(cur.sessionId); effortBySession.delete(cur.sessionId); }
 }
 
 export async function invalidateUserAgents(userId) {
@@ -253,6 +266,8 @@ export async function invalidateUserAgents(userId) {
     if (v.userId === userId) {
       try { await v.handle.dispose(); } catch {}
       agents.delete(scope);
+      languageBySession.delete(v.sessionId);
+      effortBySession.delete(v.sessionId);
     }
   }
 }
@@ -266,15 +281,18 @@ function lastAssistantText(agent) {
 
 export async function chatDsh(userId, scope, userText) {
   if (!config.llm.apiKey) {
-    return { reply: '⚙️ LLMが未設定です。.env にキーを設定してください。', actions: [], remember: [] };
+    return { reply: t(userLang(userId), 'cu.noLlmKey'), actions: [], remember: [] };
   }
   const agent = await agentFor(userId, scope);
+  const languageSettings = store.getSettings(userId) ?? {};
+  languageBySession.set(agents.get(scope).sessionId, languageSettings.lang || (scope.startsWith('home:') || scope.startsWith('card:') || scope.startsWith('brief:') ? languageSettings.lang_auto || 'en' : requestLanguageHint(userText)));
   const memories = store.listMemories(userId);
   const cards = store.listHomeCards(userId);
   const specialties = store.listSpecialties(userId);
   const city = (store.getSettings(userId) ?? {}).home_city;
   const outcomes = computerOutcomes.get(scope) ?? [];
   const ctxBlock = [
+    '[Response language] ' + (store.getSettings(userId)?.lang || (scope.startsWith('home:') || scope.startsWith('card:') || scope.startsWith('brief:') ? store.getSettings(userId)?.lang_auto || 'en' : 'Match the latest user message, in any language.')),
     outcomes.length ? '【前回以降のブラウザ作業結果】\n' + outcomes.join('\n') : '',
     memories.length ? '【このユーザーについて覚えていること】\n' + memories.map(m => '- ' + m.content).join('\n') : '',
     cards.length ? '【ユーザーのHomeに出ているカード】\n' + cards.map(c => '- ' + (c.emoji ? c.emoji + ' ' : '') + c.title + '（内容指示: ' + String(c.prompt).slice(0, 80) + '）').join('\n') : '',
@@ -297,7 +315,8 @@ export async function chatDsh(userId, scope, userText) {
     content: [{ type: 'text', text }],
   }));
 
-  await followup(ctxBlock ? ctxBlock + '\n\n' + userText : userText);
+  const languageReminder = '\n\n[Reply language rule: Answer the user request immediately above in that request\'s language. The Japanese context and instructions are internal and must not determine the language of reply, action arguments, labels, or memory. Include reply_language.]';
+  await followup((ctxBlock ? ctxBlock + '\n\n' : '') + userText + languageReminder);
   await waitReply();
 
   let raw = lastAssistantText(agent);
@@ -312,13 +331,15 @@ export async function chatDsh(userId, scope, userText) {
     raw = lastAssistantText(agent) ?? '';
     parsed = parseJsonLoose(raw);
   }
-  parsed = parsed ?? { reply: 'うまく応答を組み立てられませんでした。もう一度お願いします。' };
+  parsed = parsed ?? { reply: t(userLang(userId), 'generic.invalidReply') };
+  const responseLang = languageTag(parsed.reply_language || '');
+  if (responseLang && !store.getSettings(userId)?.lang) store.setLangAuto(userId, responseLang);
   if (outcomes.length) computerOutcomes.set(scope, (computerOutcomes.get(scope) ?? []).slice(outcomes.length));
-  const result = ensureLoginHandoff(userText, {
+  const result = {
     reply: String(parsed.reply ?? raw).slice(0, 3800),
     actions: Array.isArray(parsed.actions) ? parsed.actions.slice(0, 3) : [],
     remember: Array.isArray(parsed.remember) ? parsed.remember.slice(0, 2) : [],
-  });
+  };
   for (const fact of result.remember) {
     if (typeof fact === 'string' && fact.trim()) store.addMemory(userId, fact.trim());
   }
@@ -330,5 +351,7 @@ export async function chatDsh(userId, scope, userText) {
 export async function shutdownDsh() {
   for (const [, v] of agents) { try { await v.handle.dispose(); } catch {} }
   agents.clear();
+  languageBySession.clear();
+  effortBySession.clear();
   if (ctx) { try { await ctx.fiber.dispose(); } catch {} ctx = null; booted = null; }
 }

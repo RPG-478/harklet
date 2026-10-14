@@ -2,6 +2,8 @@
 
 # harklet
 
+会話とブラウザ作業の案内はユーザーの言語に合わせて応答します。`/language code:ja`・`/language code:en`・`/language code:ko` など、BCP47言語コードで応答言語を固定できます。`/language code:auto` で自動判定へ戻ります。固定ボタン・モーダル・Homeの見出し・操作結果は英語／日本語／中国語を翻訳済み。それ以外の言語では固定UIは英語です。コマンド説明はDiscordクライアントの言語に従います。ブラウザ操作への振り分けはモデルが判断し、日本語のログイン正規表現フォールバックは使いません。
+
 普段のチャットでWeb作業を頼むと、Agentが必要に応じてユーザー専用のQuicksand Linux VM内でブラウザを操作します。Dockerは不要です。停止は`/stop`。導入方法と権限の範囲は[専用ブラウザの説明](docs/browser-agent.md)を参照してください。
 
 作業開始時に閲覧専用noVNCのURLを本人のDMへ送ります。cloudflaredを導入するとスマホや別ネットワークからHTTPSで見られます。

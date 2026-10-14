@@ -1,5 +1,6 @@
 import { parseAction } from './actions.js';
 import { redact } from './names.js';
+import { t } from '../i18n.js';
 
 // Stop only after this many turns in a row without a model reply or a screen.
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -71,7 +72,7 @@ function describe(a) {
 export async function runComputerTask(opts) {
   const {
     userId, task, sessionId, browser, vault, decide, requestSecrets, chooseAuthMethod, shareAuthQr, requestHuman, progress,
-    signal, maxSteps = 40, deadlineMs = 15 * 60 * 1000, settleMs = 700,
+    signal, lang = 'ja', maxSteps = 40, deadlineMs = 15 * 60 * 1000, settleMs = 700,
     sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   } = opts;
   const started = Date.now();
@@ -122,7 +123,7 @@ export async function runComputerTask(opts) {
     }
     const imageSent = useImage && shot !== null;
     if (!imageSent && !elementList) {
-      return { status: 'failed', reason: '画像も要素一覧もないので操作できませんでした', steps: step };
+      return { status: 'failed', reason: t(lang, 'loop.noObs'), steps: step };
     }
 
     const secretNames = vault.listSecretNames(userId);
@@ -154,7 +155,7 @@ export async function runComputerTask(opts) {
         note(step + '. モデルへの送信が失敗しました（' + err.message + '）');
       }
       if (failures >= MAX_CONSECUTIVE_FAILURES) {
-        return { status: 'failed', reason: '連続して応答を得られませんでした: ' + err.message, steps: step };
+        return { status: 'failed', reason: t(lang, 'loop.noReply', { msg: err.message }), steps: step };
       }
       continue;
     }
@@ -162,10 +163,10 @@ export async function runComputerTask(opts) {
 
     failures = shot ? 0 : failures + 1;
     if (failures >= MAX_CONSECUTIVE_FAILURES) {
-      return { status: 'failed', reason: '画面を取得できない状態が続いたので止めました', steps: step };
+      return { status: 'failed', reason: t(lang, 'loop.noScreen'), steps: step };
     }
 
-    const parsed = parseAction(raw, {
+    const parsed = parseAction(raw, { lang,
       width: size.width,
       height: size.height,
       elementCount: elementList ? elementList.elements.length : 0,
@@ -188,9 +189,9 @@ export async function runComputerTask(opts) {
     // No visible page change for a while: nudge, then hand to the human.
     const stale = step - lastMeaningfulStep;
     if (stale >= 15) {
-      const result = await requestHuman?.({ message: '画面操作が進みません。表示されている確認（CAPTCHAや人間確認）を解いてください' });
+      const result = await requestHuman?.({ message: t(lang, 'loop.humanMsg') });
       lastMeaningfulStep = step;
-      if (result === 'unavailable') return { status: 'failed', reason: '画面が長時間変化せず、人間確認も依頼できませんでした', steps: step };
+      if (result === 'unavailable') return { status: 'failed', reason: t(lang, 'loop.staleHuman'), steps: step };
       if (signal?.aborted) return { status: 'stopped' };
       note(step + '. 画面が ' + stale + ' ステップ変化しないため本人に確認を依頼しました');
       continue;
@@ -226,13 +227,13 @@ export async function runComputerTask(opts) {
     } else if (a.action === 'share_auth_qr') {
       if (!imageSent) { note(step + '. 画像がないため認証画面を送れませんでした'); continue; }
       const shared = await shareAuthQr?.({ png: Buffer.from(shot.png_base64, 'base64'), message: a.message });
-      if (!shared) return { status: 'failed', reason: '認証画面のDM確認ができませんでした', steps: step };
+      if (!shared) return { status: 'failed', reason: t(lang, 'loop.qrDmFail'), steps: step };
       note(step + '. 認証画面を本人のDiscord DMで確認しました。画面の変化を確認してください');
       rememberStep('認証用の画面を本人に確認');
     } else if (a.action === 'request_human') {
       const result = await requestHuman?.({ message: a.message });
       if (result === 'unavailable') {
-        return { status: 'failed', reason: '人間確認が出ましたが、画面ビューアが操作できない設定なので解けませんでした', steps: step };
+        return { status: 'failed', reason: t(lang, 'loop.noHuman'), steps: step };
       }
       if (signal?.aborted) return { status: 'stopped' };
       if (result) {
@@ -282,7 +283,7 @@ export async function runComputerTask(opts) {
       }
     }
 
-    if (progress && step % 5 === 0) await progress('⏳ ' + step + ' 手目まで進みました');
+    if (progress && step % 5 === 0) await progress(t(lang, 'cu.progress', { step }));
     await sleep(settleMs);
   }
   return { status: 'max_steps', steps: maxSteps };

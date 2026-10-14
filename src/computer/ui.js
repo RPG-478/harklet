@@ -1,24 +1,25 @@
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { t } from '../i18n.js';
 
 // The request is posted in the channel. Only the requesting user can open the modal.
-export function secretRequestPayload(reqId, message, fields, origin = '') {
+export function secretRequestPayload(reqId, message, fields, origin = '', lang = 'en') {
   const embed = new EmbedBuilder()
-    .setTitle('🔐 ログイン情報の入力')
+    .setTitle(t(lang, 'cu.secretTitle'))
     .setDescription(message)
-    .addFields({ name: '入力する項目', value: fields.map(f => '・' + f.label).join(' / ') },
-      { name: '使用するサイト', value: origin || '未指定' })
+    .addFields({ name: t(lang, 'cu.secretFields'), value: fields.map(f => '・' + f.label).join(' / ') },
+      { name: t(lang, 'cu.secretOrigin'), value: origin || t(lang, 'cu.secretOriginNone') })
     .setColor(0xfaa61a)
     .setFooter({ text: fields.some(f => f.one_time)
-      ? '認証コードは保存せず一時利用。その他の値は暗号化保存し、AIには渡しません'
-      : '入力値は暗号化して保存し、AIには渡しません。依頼した本人だけが押せます' });
+      ? t(lang, 'cu.secretFooterOtp')
+      : t(lang, 'cu.secretFooter') });
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('cu_secret:' + reqId).setLabel('入力する').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('cu_secret:' + reqId).setLabel(t(lang, 'cu.secretBtn')).setStyle(ButtonStyle.Primary),
   );
   return { embeds: [embed], components: [row] };
 }
 
-export function secretModal(reqId, fields) {
-  const modal = new ModalBuilder().setCustomId('cu_secret_modal:' + reqId).setTitle('ログイン情報');
+export function secretModal(reqId, fields, lang = 'en') {
+  const modal = new ModalBuilder().setCustomId('cu_secret_modal:' + reqId).setTitle(t(lang, 'cu.secretModalTitle'));
   modal.addComponents(...fields.map(f => new ActionRowBuilder().addComponents(
     new TextInputBuilder()
       .setCustomId(f.name)
@@ -30,7 +31,7 @@ export function secretModal(reqId, fields) {
   return modal;
 }
 
-export function viewerPayload(png) {
+export function viewerPayload(png, lang = 'en') {
   const embed = new EmbedBuilder()
     .setTitle('🖥️ 作業中の画面')
     .setDescription('現在の専用ブラウザ画面です。作業はチャットから依頼できます。')
@@ -39,31 +40,31 @@ export function viewerPayload(png) {
   return { embeds: [embed], files: [new AttachmentBuilder(png, { name: 'harklet-browser.jpg' })] };
 }
 
-export function authMethodPayload(reqId, message, options) {
-  const embed = new EmbedBuilder().setTitle('🔐 認証方法を選択')
+export function authMethodPayload(reqId, message, options, lang = 'en') {
+  const embed = new EmbedBuilder().setTitle(t(lang, 'cu.authTitle'))
     .setDescription(message).setColor(0xfaa61a);
   const menu = new StringSelectMenuBuilder().setCustomId('cu_auth:' + reqId)
-    .setPlaceholder('使用する認証方法').addOptions(options.map(o => ({ label: o.label, value: o.id })));
+    .setPlaceholder(t(lang, 'cu.authPlaceholder')).addOptions(options.map(o => ({ label: o.label, value: o.id })));
   return { embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)] };
 }
 
-export function authQrPayload(reqId, png, message) {
-  const embed = new EmbedBuilder().setTitle('🔐 認証用の画面')
+export function authQrPayload(reqId, png, message, lang = 'en') {
+  const embed = new EmbedBuilder().setTitle(t(lang, 'cu.qrTitle'))
     .setDescription(message).setImage('attachment://harklet-auth.jpg').setColor(0xfaa61a);
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('cu_qr:' + reqId).setLabel('確認して続ける').setStyle(ButtonStyle.Primary));
+    new ButtonBuilder().setCustomId('cu_qr:' + reqId).setLabel(t(lang, 'cu.qrBtn')).setStyle(ButtonStyle.Primary));
   return { embeds: [embed], components: [row], files: [new AttachmentBuilder(png, { name: 'harklet-auth.jpg' })] };
 }
 
 // A human-only check (hCaptcha etc.) appeared on the page. The viewer link is
 // private, so it is sent by DM; only the requester can press the button.
-export function humanCheckPayload(reqId, message, hasViewer) {
+export function humanCheckPayload(reqId, message, hasViewer, lang = 'en') {
   const embed = new EmbedBuilder()
-    .setTitle('🧩 人間確認が出ています')
-    .setDescription(message + (hasViewer ? '\n画面リンクはDMに送りました。' : ''))
+    .setTitle(t(lang, 'cu.humanTitle'))
+    .setDescription(message + (hasViewer ? t(lang, 'cu.humanLinkNote') : ''))
     .setColor(0xfaa61a)
-    .setFooter({ text: '依頼した本人だけが押せます' });
+    .setFooter({ text: t(lang, 'cu.humanFooter') });
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('cu_human:' + reqId).setLabel('解決した').setStyle(ButtonStyle.Primary));
+    new ButtonBuilder().setCustomId('cu_human:' + reqId).setLabel(t(lang, 'cu.humanBtn')).setStyle(ButtonStyle.Primary));
   return { embeds: [embed], components: [row] };
 }

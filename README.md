@@ -2,6 +2,8 @@
 
 # harklet
 
+Chat and browser-task messages follow your language automatically. Use `/language code:ja`, `/language code:en`, or `/language code:ko` (any BCP47 language tag) to pin a response language; `/language code:auto` restores automatic mode. Fixed buttons, modals, Home labels and action results have English, Japanese and Chinese translations; other UI locales use English. Command descriptions follow your Discord client locale. Browser routing is decided by the model; there is no Japanese regex login fallback.
+
 **Languages:** English | [日本語](./README.ja.md) | [中文](./README.zh.md)
 
 A personal AI assistant Discord bot inspired by [Hark Pro](https://www.hark.com).

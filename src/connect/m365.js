@@ -2,6 +2,8 @@
 // User opens microsoft.com/devicelogin on their phone, enters the code, done — no
 // copy-paste needed, which suits mobile-first Discord use.
 import { vault, vaultReady } from '../computer/vault.js';
+import { t } from '../i18n.js';
+import { userLang } from '../user-lang.js';
 
 // OSS deployments can embed a default Entra app registration the maintainer
 // created once (see docs/oauth-setup.md). .env values override the default.
@@ -97,9 +99,9 @@ export async function mailUnread(userId, n = 5) {
   const data = await api(userId, 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?'
     + '$top=25&$select=subject,from,receivedDateTime,isRead&$orderby=receivedDateTime desc');
   const msgs = (data.value ?? []).filter(m => m.isRead === false).slice(0, n);
-  if (!msgs.length) return '📬 Outlook: 未読はありません';
-  const lines = msgs.map(m => '• ' + (m.subject ?? '(無題)') + ' — ' + (m.from?.emailAddress?.name ?? m.from?.emailAddress?.address ?? '').slice(0, 40));
-  return '📬 Outlook 未読\n' + lines.join('\n');
+  if (!msgs.length) return t(userLang(userId), 'm.none');
+  const lines = msgs.map(m => '• ' + (m.subject ?? t(userLang(userId), 'g.noSubject')) + ' — ' + (m.from?.emailAddress?.name ?? m.from?.emailAddress?.address ?? '').slice(0, 40));
+  return t(userLang(userId), 'm.list', { lines: lines.join('\n') });
 }
 
 export async function calendarToday(userId) {
@@ -111,13 +113,13 @@ export async function calendarToday(userId) {
     + '&endDateTime=' + encodeURIComponent(end.toISOString())
     + '&$top=10&$select=subject,start,end&$orderby=start/dateTime');
   const evs = data.value ?? [];
-  if (!evs.length) return '📅 今日の予定はありません';
+  if (!evs.length) return t(userLang(userId), 'g.calNone');
   const lines = evs.map(e => {
     const dt = e.start?.dateTime;
-    const t = dt ? new Date(dt + 'Z').toTimeString().slice(0, 5) : '終日';
-    return '• ' + t + ' ' + (e.subject ?? '(無題)');
+    const t = dt ? new Date(dt + 'Z').toTimeString().slice(0, 5) : t(userLang(userId), 'g.allDay');
+    return '• ' + t + ' ' + (e.subject ?? t(userLang(userId), 'g.noSubject'));
   });
-  return '📅 今日の予定 (M365)\n' + lines.join('\n');
+  return t(userLang(userId), 'm.calList', { lines: lines.join('\n') });
 }
 
 export function m365Disconnect(userId) {

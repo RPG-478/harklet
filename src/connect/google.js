@@ -2,6 +2,8 @@
 // Flow: agent "connect" action → auth URL → user consents → browser lands on a dead
 // http://127.0.0.1 page → user pastes the URL into a Discord modal → we exchange the code.
 import { vault, vaultReady } from '../computer/vault.js';
+import { t } from '../i18n.js';
+import { userLang } from '../user-lang.js';
 
 // OSS deployments can embed a default OAuth client the maintainer created once
 // in Google Cloud (rclone-style). End users then only need to sign in. Values
@@ -95,15 +97,15 @@ export async function gmailUnread(userId, n = 5) {
   const list = await api(userId, 'https://gmail.googleapis.com/gmail/v1/users/me/messages?q='
     + encodeURIComponent('is:unread newer_than:3d') + '&maxResults=' + n);
   const msgs = list.messages ?? [];
-  if (!msgs.length) return '📬 Gmail: 未読はありません（3日以内）';
+  if (!msgs.length) return t(userLang(userId), 'g.none');
   const lines = [];
   for (const m of msgs) {
     const d = await api(userId, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' + m.id
       + '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date');
     const h = Object.fromEntries((d.payload?.headers ?? []).map(x => [x.name, x.value]));
-    lines.push('• ' + (h.Subject ?? '(無題)') + ' — ' + (h.From ?? '').slice(0, 60));
+    lines.push('• ' + (h.Subject ?? t(userLang(userId), 'g.noSubject')) + ' — ' + (h.From ?? '').slice(0, 60));
   }
-  return '📬 Gmail 未読 ' + (list.resultSizeEstimate ?? msgs.length) + '件\n' + lines.join('\n');
+  return t(userLang(userId), 'g.list', { n: list.resultSizeEstimate ?? msgs.length, lines: lines.join('\n') });
 }
 
 export async function calendarToday(userId) {
@@ -115,23 +117,23 @@ export async function calendarToday(userId) {
     + '&timeMax=' + encodeURIComponent(end.toISOString())
     + '&singleEvents=true&orderBy=startTime&maxResults=10');
   const evs = data.items ?? [];
-  if (!evs.length) return '📅 今日の予定はありません';
+  if (!evs.length) return t(userLang(userId), 'g.calNone');
   const lines = evs.map(e => {
-    const t = e.start?.dateTime ? new Date(e.start.dateTime).toTimeString().slice(0, 5) : '終日';
-    return '• ' + t + ' ' + (e.summary ?? '(無題)');
+    const t = e.start?.dateTime ? new Date(e.start.dateTime).toTimeString().slice(0, 5) : t(userLang(userId), 'g.allDay');
+    return '• ' + t + ' ' + (e.summary ?? t(userLang(userId), 'g.noSubject'));
   });
-  return '📅 今日の予定\n' + lines.join('\n');
+  return t(userLang(userId), 'g.calList', { lines: lines.join('\n') });
 }
 
 // Move messages matching a Gmail search query to Trash. Caps at 100 per call;
 // the agent can repeat with the same query when more remain.
 export async function gmailTrash(userId, query) {
   const q = String(query ?? '').trim();
-  if (!q) return '🗑️ 検索条件が空です（例: from:reddit.com）';
+  if (!q) return t(userLang(userId), 'g.trashEmpty');
   const list = await api(userId, 'https://gmail.googleapis.com/gmail/v1/users/me/messages?q='
     + encodeURIComponent(q) + '&maxResults=100');
   const msgs = list.messages ?? [];
-  if (!msgs.length) return '🗑️ 「' + q + '」に一致するメールはありません';
+  if (!msgs.length) return t(userLang(userId), 'g.trashNone', { q });
   const token = await accessToken(userId);
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify', {
     method: 'POST',
@@ -143,7 +145,7 @@ export async function gmailTrash(userId, query) {
     throw new Error('Gmail API ' + res.status + ': ' + JSON.stringify(data?.error?.message ?? data).slice(0, 200));
   }
   const total = list.resultSizeEstimate ?? msgs.length;
-  return '🗑️ ' + msgs.length + '件をゴミ箱に移しました（「' + q + '」の推定残数: ' + Math.max(0, total - msgs.length) + '）';
+  return t(userLang(userId), 'g.trashed', { n: msgs.length, q, rest: Math.max(0, total - msgs.length) });
 }
 
 export function googleDisconnect(userId) {

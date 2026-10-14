@@ -2,6 +2,8 @@
 
 # harklet
 
+聊天和浏览器任务提示会自动跟随用户的语言。通过 `/language code:zh`、`/language code:en`、`/language code:ko` 等BCP47语言代码可固定回复语言；`/language code:auto` 恢复自动检测。固定按钮、表单、Home标题和操作结果已提供英文、日文和中文翻译；其他界面语言使用英文。命令说明跟随Discord客户端的语言。浏览器任务由模型判断，不再使用日语登录正则表达式回退。
+
 Chat browser work uses a dedicated Quicksand Linux VM and does not require Docker. Use `/stop` to save and close it. See [setup and limitations](docs/browser-agent.md).
 
 **Languages:** [English](./README.md) | [日本語](./README.ja.md) | 中文

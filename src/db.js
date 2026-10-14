@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS workflow_observations (
 
 // v2: per-user LLM prefs / v3: home message anchor
 for (const col of ['model TEXT', 'effort TEXT', 'home_channel_id TEXT', 'home_message_id TEXT',
-  'home_city TEXT', 'home_lat REAL', 'home_lon REAL']) {
+  'home_city TEXT', 'home_lat REAL', 'home_lon REAL', 'lang TEXT', 'lang_auto TEXT']) {
   try { db.exec(`ALTER TABLE settings ADD COLUMN ${col}`); } catch { /* exists */ }
 }
 try { db.exec('ALTER TABLE reminders ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
@@ -138,6 +138,10 @@ const q = {
   setHomeCity: db.prepare(`INSERT INTO settings (user_id, home_city, home_lat, home_lon) VALUES (?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET home_city=excluded.home_city,
       home_lat=excluded.home_lat, home_lon=excluded.home_lon`),
+  setLang: db.prepare(`INSERT INTO settings (user_id, lang) VALUES (?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET lang=excluded.lang`),
+  setLangAuto: db.prepare(`INSERT INTO settings (user_id, lang_auto) VALUES (?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET lang_auto=excluded.lang_auto`),
   clearHome: db.prepare('UPDATE settings SET home_channel_id=NULL, home_message_id=NULL WHERE user_id=?'),
   homeTargets: db.prepare('SELECT user_id, home_channel_id, home_message_id FROM settings WHERE home_channel_id IS NOT NULL'),
   addHomeCard: db.prepare('INSERT INTO home_cards (user_id, title, prompt, emoji, color, ops, buttons, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
@@ -209,6 +213,8 @@ export const store = {
   setEffort: (userId, effort) => q.setEffort.run(userId, effort),
   setHome: (userId, channelId, messageId) => q.setHome.run(userId, channelId, messageId),
   setHomeCity: (userId, city, lat, lon) => q.setHomeCity.run(userId, city, lat, lon),
+  setLang: (userId, lang) => q.setLang.run(userId, lang ?? null),
+  setLangAuto: (userId, lang) => q.setLangAuto.run(userId, lang ?? null),
   clearHome: (userId) => q.clearHome.run(userId),
   homeTargets: () => q.homeTargets.all(),
   addHomeCard: (userId, title, prompt, emoji, color, ops, buttons) =>

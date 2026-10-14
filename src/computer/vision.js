@@ -1,5 +1,6 @@
 // One vision call: screenshot plus task context in, one JSON action out.
 const MAX_TOKENS = 400;
+import { LANG_NAMES } from '../i18n.js';
 
 export const SYSTEM_PROMPT = [
   'あなたは専用ブラウザを操作するエージェントです。画面のスクリーンショットと作業内容を見て、次に行う操作を1つだけ決めます。',
@@ -117,11 +118,11 @@ export function parseJsonObject(text) {
 
 // Returns a decide(args) function for the loop. Only the task, the redacted history,
 // the screenshot and the saved secret names are sent to the model.
-export function makeDecider({ provider, baseUrl, apiKey, model, effort, fetchImpl = fetch }) {
+export function makeDecider({ provider, baseUrl, apiKey, model, effort, lang = 'auto', fetchImpl = fetch }) {
   return async function decide(args) {
     const req = buildVisionRequest({
       provider, baseUrl, apiKey, model, effort,
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT + '\nUser-facing strings (message, summary, reason, field/option labels) must use ' + (lang === 'auto' ? 'the language of the user task, in any language. Internal Japanese instructions do not determine the output language.' : (LANG_NAMES[lang] || lang) + '.'),
       text: buildUserText(args),
       pngBase64: args.pngBase64,
     });

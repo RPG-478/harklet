@@ -3,6 +3,8 @@
 // ボタン操作と定期タイマーで更新(edit)する。
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { config } from './config.js';
+import { t } from './i18n.js';
+import { userLang } from './user-lang.js';
 import { store } from './db.js';
 import { chatDsh } from './dsh-agent.js';
 import { fmtTs } from './schedule.js';
@@ -21,9 +23,9 @@ async function briefCard(userId) {
     '各項目は短く、冒頭に絵文字を1つ。全体で300文字以内。',
     'リマインダー: ' + (rs.length ? rs.map(r => r.text + '@' + new Date(r.due_at).toISOString()).join(', ') : 'なし'),
   ].join('\n');
-  const r = await chatDsh(userId, 'home:' + userId, prompt).catch(e => ({ reply: '生成に失敗: ' + e.message, actions: [] }));
+  const r = await chatDsh(userId, 'home:' + userId, prompt).catch(e => ({ reply: t(userLang(userId), 'home.briefFail', { msg: e.message }), actions: [] }));
   const embed = new EmbedBuilder()
-    .setTitle('💡 今日の一手')
+    .setTitle(t(userLang(userId), 'home.briefTitle'))
     .setColor(HOME_COLOR)
     .setDescription(r.reply.slice(0, 900));
   return { embed, actions: r.actions ?? [] };
@@ -33,13 +35,13 @@ function remindersCard(userId) {
   const rs = store.listReminders(userId);
   if (!rs.length) return null;
   const lines = rs.slice(0, 8).map(r => `• ${r.text} — ${fmtTs(r.due_at)}`);
-  return new EmbedBuilder().setTitle('⏰ 予定').setColor(0xfee75c).setDescription(lines.join('\n'));
+  return new EmbedBuilder().setTitle(t(userLang(userId), 'home.reminders')).setColor(0xfee75c).setDescription(lines.join('\n'));
 }
 
-export async function geocodeCity(name) {
-  const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10&language=ja`)
+export async function geocodeCity(name, lang = 'en') {
+  const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10&language=${lang}`)
     .then(r => r.ok ? r.json() : null).catch(() => null);
-  return geo?.results?.find(r => r.country_code === 'JP') ?? geo?.results?.[0] ?? null;
+  return (lang === 'ja' ? geo?.results?.find(r => r.country_code === 'JP') : null) ?? geo?.results?.[0] ?? null;
 }
 
 // ユーザーの登録地域(home_city/lat/lon)を優先。未設定時は env の HOME_CITY、
@@ -48,7 +50,7 @@ async function weatherCard(userId) {
   const s = store.getSettings(userId) ?? {};
   let name = s.home_city, lat = s.home_lat, lon = s.home_lon;
   if (lat == null && config.home.city) {
-    const p = await geocodeCity(config.home.city);
+    const p = await geocodeCity(config.home.city, userLang(userId));
     if (!p) return null;
     name = `${p.name}, ${p.country_code ?? ''}`;
     lat = p.latitude;
@@ -56,9 +58,9 @@ async function weatherCard(userId) {
   }
   if (lat == null) {
     return new EmbedBuilder()
-      .setTitle('🌤️ 天気')
+      .setTitle(t(userLang(userId), 'home.weather'))
       .setColor(0x57f287)
-      .setDescription('地域が未設定です。下の「📍 地域」ボタンから地名を入れるだけで毎日ここに出ます');
+      .setDescription(t(userLang(userId), 'home.noRegion'));
   }
   const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=sunset&timezone=auto`)
     .then(r => r.ok ? r.json() : null).catch(() => null);
@@ -67,15 +69,19 @@ async function weatherCard(userId) {
     .setTitle(`🌤️ ${name}`)
     .setColor(0x57f287)
     .addFields(
-      { name: weatherLabel(w.current.weather_code), value: `${w.current.temperature_2m}°C`, inline: true },
-      { name: '日没', value: (w.daily?.sunset?.[0] ?? '').slice(11, 16) || '—', inline: true },
+      { name: weatherLabel(w.current.weather_code, userLang(userId)), value: `${w.current.temperature_2m}°C`, inline: true },
+      { name: t(userLang(userId), 'home.sunset'), value: (w.daily?.sunset?.[0] ?? '').slice(11, 16) || '—', inline: true },
     );
 }
 
 const WMO = { 0: '快晴', 1: '晴れ', 2: '一部曇り', 3: '曇り', 45: '霧', 48: '霧', 51: '霧雨', 61: '小雨', 63: '雨', 65: '大雨', 71: '小雪', 73: '雪', 75: '大雪', 80: 'にわか雨', 95: '雷雨' };
-function weatherLabel(code) { return WMO[code] ?? '天気'; }
+const WEATHER = {
+  en: { 0: 'Clear', 1: 'Sunny', 2: 'Partly cloudy', 3: 'Cloudy', 45: 'Fog', 48: 'Fog', 51: 'Drizzle', 61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 80: 'Showers', 95: 'Thunderstorm' },
+  zh: { 0: '晴朗', 1: '晴', 2: '局部多云', 3: '多云', 45: '雾', 48: '雾', 51: '毛毛雨', 61: '小雨', 63: '雨', 65: '大雨', 71: '小雪', 73: '雪', 75: '大雪', 80: '阵雨', 95: '雷雨' },
+};
+function weatherLabel(code, lang) { return (lang === 'ja' ? WMO : WEATHER[lang] || WEATHER.en)[code] ?? t(lang, 'home.weather'); }
 
-async function githubCard() {
+async function githubCard(lang) {
   const user = config.home.githubUser;
   if (!user) return null;
   const headers = { 'User-Agent': 'harklet', Accept: 'application/vnd.github+json' };
@@ -88,19 +94,19 @@ async function githubCard() {
   const top = [...repos].sort((a, b) => b.stargazers_count - a.stargazers_count).slice(0, 5);
   const lines = top.map(r => `${r.name} — ⭐${r.stargazers_count} (${(r.updated_at ?? '').slice(0, 10)})`);
   return new EmbedBuilder()
-    .setTitle(`🐙 GitHub概要 — ${user}`)
+    .setTitle(t(lang, 'home.ghTitle', { user }))
     .setColor(0x24292f)
-    .setDescription(`合計 ⭐${total} / 未解決issue+PR ${open}\n\n` + lines.join('\n'));
+    .setDescription(t(lang, 'home.ghBody', { total, open }) + '\n\n' + lines.join('\n'));
 }
 
 function memoryCard(userId) {
   const ms = store.listMemories(userId).slice(0, 4);
   if (!ms.length) return null;
   return new EmbedBuilder()
-    .setTitle('🧠 最近の記憶')
+    .setTitle(t(userLang(userId), 'home.memoryTitle'))
     .setColor(0xeb459e)
     .setDescription(ms.map(m => `• ${m.content.slice(0, 80)}`).join('\n'))
-    .setFooter({ text: '/memory list で全件・forget で削除' });
+    .setFooter({ text: t(userLang(userId), 'home.memoryFooter') });
 }
 
 function specialtiesCard(userId) {
@@ -108,10 +114,10 @@ function specialtiesCard(userId) {
   if (!list.length) return null;
   const due = list.filter(s => specialtyDue(s)).slice(0, 3);
   const shown = due.length ? due : list.slice(0, 3);
-  const lines = shown.map(s => `• ${s.name}${specialtyDue(s) ? ' — そろそろ再実行' : ''}`);
-  return new EmbedBuilder().setTitle('🔁 覚えた作業')
+  const lines = shown.map(s => `• ${s.name}${specialtyDue(s) ? t(userLang(userId), 'home.specDue') : ''}`);
+  return new EmbedBuilder().setTitle(t(userLang(userId), 'home.specTitle'))
     .setColor(0x57f287)
-    .setDescription(lines.join('\n') + '\nチャットで「この作業をもう一度」と頼めます。');
+    .setDescription(lines.join('\n') + '\n' + t(userLang(userId), 'home.specHint'));
 }
 
 // ユーザーのカスタムカード(パネル): 接続サービスのデータ(ops)を先に取得し、
@@ -141,12 +147,12 @@ async function customCard(userId, c) {
 
 export async function homePayload(userId, actionRows) {
   const customs = store.listHomeCards(userId).slice(0, 4);
-  const [brief, weather, gh, ...customEmbeds] = await Promise.all([briefCard(userId), weatherCard(userId), githubCard(), ...customs.map(c => customCard(userId, c))]);
+  const [brief, weather, gh, ...customEmbeds] = await Promise.all([briefCard(userId), weatherCard(userId), githubCard(userLang(userId)), ...customs.map(c => customCard(userId, c))]);
   const embeds = [brief.embed, ...customEmbeds.map(x => x?.embed), specialtiesCard(userId), weather, gh, remindersCard(userId), memoryCard(userId)]
     .filter(Boolean).slice(0, 10);
-  const newProj = new ButtonBuilder().setCustomId('home_newproj').setLabel('プロジェクト作成').setEmoji('📁').setStyle(ButtonStyle.Primary);
-  const region = new ButtonBuilder().setCustomId('home_region').setLabel('地域').setEmoji('📍').setStyle(ButtonStyle.Secondary);
-  const refresh = new ButtonBuilder().setCustomId('home_refresh').setLabel('更新').setEmoji('🔄').setStyle(ButtonStyle.Secondary);
+  const newProj = new ButtonBuilder().setCustomId('home_newproj').setLabel(t(userLang(userId), 'home.newProj')).setEmoji('📁').setStyle(ButtonStyle.Primary);
+  const region = new ButtonBuilder().setCustomId('home_region').setLabel(t(userLang(userId), 'home.region')).setEmoji('📍').setStyle(ButtonStyle.Secondary);
+  const refresh = new ButtonBuilder().setCustomId('home_refresh').setLabel(t(userLang(userId), 'home.refresh')).setEmoji('🔄').setStyle(ButtonStyle.Secondary);
   const rows = [new ActionRowBuilder().addComponents(newProj, region, refresh)];
   if (brief.actions?.length) rows.push(...actionRows(userId, brief.actions));
   // カスタムカード(パネル)固有のボタン: 押すとエージェントがその指示を実行
@@ -164,7 +170,7 @@ export async function homePayload(userId, actionRows) {
     if (row.components.length) rows.push(row);
   });
   return {
-    content: '🏠 **Harklet Home**\n*このメッセージに返信するとHome/カードを会話で編集できます*',
+    content: t(userLang(userId), 'home.head'),
     embeds,
     components: rows.slice(0, 5),
   };

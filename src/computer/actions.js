@@ -1,4 +1,5 @@
 import { isSecretName, isOneTimeSecretField } from './names.js';
+import { t as translate } from '../i18n.js';
 
 const KEY_RE = /^[a-zA-Z0-9_+]{1,20}$/;
 const TYPES = new Set(['click', 'double_click', 'right_click', 'move', 'scroll', 'type', 'type_secret',
@@ -17,7 +18,7 @@ function point(raw, width, height) {
 
 // Validate one model reply. Returns { ok, action } or { ok: false, error }.
 // Nothing here touches the sandbox or the vault.
-export function parseAction(raw, { width, height, elementCount = 0 }) {
+export function parseAction(raw, { width, height, elementCount = 0, lang = 'ja' }) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return bad('reply is not a JSON object');
   const t = raw.action;
   if (!TYPES.has(t)) return bad('unknown action: ' + String(t));
@@ -82,7 +83,7 @@ export function parseAction(raw, { width, height, elementCount = 0 }) {
       const ok = fields.length >= 1 && fields.length <= 4
         && fields.every(f => f && isSecretName(f.name) && typeof f.label === 'string' && f.label.length >= 1 && f.label.length <= 40);
       if (!ok) return bad('request_secrets needs 1-4 fields, each with name and label');
-      const message = typeof raw.message === 'string' ? raw.message.slice(0, 300) : 'ログイン情報を入力してください';
+      const message = typeof raw.message === 'string' ? raw.message.slice(0, 300) : translate(lang, 'actdef.secrets');
       return good({ action: t, message, fields: fields.map(f => ({
         name: f.name,
         label: f.label,
@@ -94,13 +95,13 @@ export function parseAction(raw, { width, height, elementCount = 0 }) {
       if (options.length < 2 || options.length > 10 ||
           !options.every(o => o && isSecretName(o.id) && typeof o.label === 'string' && o.label.length >= 1 && o.label.length <= 100) ||
           new Set(options.map(o => o.id)).size !== options.length) return bad('choose_auth_method needs 2-10 distinct options');
-      return good({ action: t, message: String(raw.message ?? '認証方法を選んでください').slice(0, 300),
+      return good({ action: t, message: String(raw.message ?? translate(lang, 'actdef.auth')).slice(0, 300),
         options: options.map(o => ({ id: o.id, label: o.label })) });
     }
     case 'share_auth_qr':
-      return good({ action: t, message: String(raw.message ?? '認証用QRコードを確認してください').slice(0, 300) });
+      return good({ action: t, message: String(raw.message ?? translate(lang, 'actdef.qr')).slice(0, 300) });
     case 'request_human':
-      return good({ action: t, message: String(raw.message ?? '画面の確認を解いてください').slice(0, 300) });
+      return good({ action: t, message: String(raw.message ?? translate(lang, 'actdef.human')).slice(0, 300) });
     case 'done':
       return good({ action: t, summary: String(raw.summary ?? '').slice(0, 500), remember: raw.remember === true });
     case 'fail':
