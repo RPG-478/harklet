@@ -118,6 +118,7 @@ const q = {
   bumpReminderAttempt: db.prepare('UPDATE reminders SET attempts = attempts + 1 WHERE id = ?'),
   addPanel: db.prepare('INSERT OR REPLACE INTO panels (thread_id, user_id, topic, created_at) VALUES (?, ?, ?, ?)'),
   getPanel: db.prepare('SELECT user_id, topic FROM panels WHERE thread_id = ?'),
+  listPanels: db.prepare('SELECT thread_id, topic FROM panels WHERE user_id = ? ORDER BY created_at DESC LIMIT 20'),
   addAction: db.prepare('INSERT INTO pending_actions (user_id, payload, created_at) VALUES (?, ?, ?)'),
   getAction: db.prepare('SELECT user_id, payload FROM pending_actions WHERE id = ?'),
   delAction: db.prepare('DELETE FROM pending_actions WHERE id = ?'),
@@ -200,6 +201,7 @@ export const store = {
   bumpReminderAttempt: (id) => q.bumpReminderAttempt.run(id),
   addPanel: (threadId, userId, topic) => q.addPanel.run(threadId, userId, topic, Date.now()),
   getPanel: (threadId) => q.getPanel.get(threadId),
+  listPanels: (userId) => q.listPanels.all(userId),
   addAction: (userId, payload) =>
     Number(q.addAction.run(userId, JSON.stringify(payload), Date.now()).lastInsertRowid),
   getAction: (id) => {

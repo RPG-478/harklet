@@ -122,7 +122,7 @@ function specialtiesCard(userId) {
 
 // ユーザーのカスタムカード(パネル): 接続サービスのデータ(ops)を先に取得し、
 // それを材料に登録プロンプトで内容を生成。ボタン定義があればインタラクション用に返す。
-async function customCard(userId, c) {
+export async function customCard(userId, c) {
   let ops = [];
   try { ops = JSON.parse(c.ops ?? '[]'); } catch {}
   if (!Array.isArray(ops)) ops = [];

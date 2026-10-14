@@ -21,6 +21,7 @@ const pending = new Map(); // reqId -> { userId, fields, timer, resolve }
 let seq = 0;
 
 export function computerIsBusy() { return running.size > 0 || pending.size > 0; }
+export function computerRunning(userId) { return running.has(userId); }
 
 function visionModel() {
   return process.env.HARKLET_CU_MODEL?.trim() || config.llm.model;

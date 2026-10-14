@@ -20,6 +20,7 @@ It brings an **agent that works from ordinary chat**, with persistent memory and
 | Panels | Home cards are Hark-style panels: the agent can build cards that pull live data from connected services and carry their own action buttons. Reply to the Home message to redesign them in chat |
 | Projects | Ask in chat or use the Projects button to create a topic-scoped thread |
 | Agent browser | Ask in chat for Web work; Harklet starts a per-user Quicksand Linux VM and reports the result. `/stop` saves and closes it; [setup and limits](docs/browser-agent.md) |
+| Web UI | `/web` gives you a private, five-minute sign-in link to a local dashboard with chat, actions, reminders, projects and panels. It runs on the bot's computer at `127.0.0.1:8787`; set `HARKLET_WEB_PORT=0` to disable it |
 | Live screen | A read-only noVNC link is sent by DM when browser work starts. With cloudflared installed, it opens over HTTPS from a phone or another network. Optional interactive mode lets the owner solve human checks |
 
 ## Languages
