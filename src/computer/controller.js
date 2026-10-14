@@ -26,9 +26,12 @@ function visionModel() {
   return process.env.HARKLET_CU_MODEL?.trim() || config.llm.model;
 }
 
-function computerMaxSteps() {
-  const value = Number(process.env.HARKLET_CU_MAX_STEPS);
-  return Number.isInteger(value) && value >= 1 && value <= 200 ? value : 80;
+export function computerMaxSteps(userId) {
+  const saved = store.getSettings(userId)?.computer_max_steps;
+  if (Number.isSafeInteger(saved) && saved >= 0) return saved;
+  const raw = process.env.HARKLET_CU_MAX_STEPS?.trim();
+  const value = raw ? Number(raw) : NaN;
+  return Number.isSafeInteger(value) && value >= 0 ? value : 80;
 }
 
 export async function handleComputerInteraction(interaction) {
@@ -124,7 +127,7 @@ async function runTask(userId, s, task, abort, channel, post, onDone) {
   let result;
   try {
     result = await runComputerTask({
-      maxSteps: computerMaxSteps(),
+      maxSteps: computerMaxSteps(userId),
       lang: responseLanguage(userId),
       userId,
       task,

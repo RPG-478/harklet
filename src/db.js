@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS workflow_observations (
 
 // v2: per-user LLM prefs / v3: home message anchor
 for (const col of ['model TEXT', 'effort TEXT', 'home_channel_id TEXT', 'home_message_id TEXT',
-  'home_city TEXT', 'home_lat REAL', 'home_lon REAL', 'lang TEXT', 'lang_auto TEXT']) {
+  'home_city TEXT', 'home_lat REAL', 'home_lon REAL', 'lang TEXT', 'lang_auto TEXT', 'computer_max_steps INTEGER']) {
   try { db.exec(`ALTER TABLE settings ADD COLUMN ${col}`); } catch { /* exists */ }
 }
 try { db.exec('ALTER TABLE reminders ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
@@ -142,6 +142,8 @@ const q = {
     ON CONFLICT(user_id) DO UPDATE SET lang=excluded.lang`),
   setLangAuto: db.prepare(`INSERT INTO settings (user_id, lang_auto) VALUES (?, ?)
     ON CONFLICT(user_id) DO UPDATE SET lang_auto=excluded.lang_auto`),
+  setComputerMaxSteps: db.prepare(`INSERT INTO settings (user_id, computer_max_steps) VALUES (?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET computer_max_steps=excluded.computer_max_steps`),
   clearHome: db.prepare('UPDATE settings SET home_channel_id=NULL, home_message_id=NULL WHERE user_id=?'),
   homeTargets: db.prepare('SELECT user_id, home_channel_id, home_message_id FROM settings WHERE home_channel_id IS NOT NULL'),
   addHomeCard: db.prepare('INSERT INTO home_cards (user_id, title, prompt, emoji, color, ops, buttons, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
@@ -215,6 +217,7 @@ export const store = {
   setHomeCity: (userId, city, lat, lon) => q.setHomeCity.run(userId, city, lat, lon),
   setLang: (userId, lang) => q.setLang.run(userId, lang ?? null),
   setLangAuto: (userId, lang) => q.setLangAuto.run(userId, lang ?? null),
+  setComputerMaxSteps: (userId, count) => q.setComputerMaxSteps.run(userId, count),
   clearHome: (userId) => q.clearHome.run(userId),
   homeTargets: () => q.homeTargets.all(),
   addHomeCard: (userId, title, prompt, emoji, color, ops, buttons) =>

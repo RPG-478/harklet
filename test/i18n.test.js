@@ -59,8 +59,19 @@ test('localized Discord handoffs serialize and modal labels fit platform limits'
   }
   const payload = commands.map(c=>c.toJSON());
   assert.ok(payload.some(c=>c.name==='language'));
+  const steps = payload.find(c=>c.name==='steps');
+  assert.equal(steps.options[0].name,'count');
+  assert.equal(steps.options[0].min_value,0);
   assert.equal(new Set(payload.map(c=>c.name)).size,payload.length);
   for(const cmd of payload.filter(c=>c.name!=='language')) assert.ok(cmd.description_localizations.ja);
+});
+
+test('browser step preference is stored separately for each user', () => {
+  assert.equal(store.getSettings('steps-a'), undefined);
+  store.setComputerMaxSteps('steps-a', 0);
+  store.setComputerMaxSteps('steps-b', 125);
+  assert.equal(store.getSettings('steps-a').computer_max_steps, 0);
+  assert.equal(store.getSettings('steps-b').computer_max_steps, 125);
 });
 
 test('vision language reaches every provider and user progress is localized', async () => {

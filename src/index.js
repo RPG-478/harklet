@@ -12,7 +12,7 @@ import { chatDsh, invalidateUserAgents, recordComputerOutcome, shutdownDsh } fro
 import { homePayload, geocodeCity } from './home.js';
 import { listModels, modelChoices } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
-import { handleComputerInteraction, startComputerTask, computerIsBusy } from './computer/controller.js';
+import { handleComputerInteraction, startComputerTask, computerIsBusy, computerMaxSteps } from './computer/controller.js';
 import { detachedProjectThreads } from './reset-plan.js';
 import * as google from './connect/google.js';
 import * as m365 from './connect/m365.js';
@@ -408,6 +408,18 @@ async function runAction(interaction, action) {
 // ---------- command handlers ----------
 
 const handlers = {
+  async steps(i) {
+    const count = i.options.getInteger('count');
+    if (count !== null) store.setComputerMaxSteps(i.user.id, count);
+    const current = computerMaxSteps(i.user.id);
+    const lang = userLang(i.user.id);
+    return i.reply({
+      content: t(lang, count === null ? 'steps.current' : 'steps.set', {
+        count: current === 0 ? t(lang, 'steps.unlimited') : String(current),
+      }),
+      flags: MessageFlags.Ephemeral,
+    });
+  },
   async language(i) {
     const value = i.options.getString('code')?.trim();
     if (value) {

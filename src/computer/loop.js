@@ -93,7 +93,7 @@ export async function runComputerTask(opts) {
   let lastObsKey = '';
   let lastMeaningfulStep = 0;
 
-  for (let step = 1; step <= maxSteps; step++) {
+  for (let step = 1; maxSteps === 0 || step <= maxSteps; step++) {
     if (signal?.aborted) return { status: 'stopped' };
     if (Date.now() - started > deadlineMs) return { status: 'timeout' };
 

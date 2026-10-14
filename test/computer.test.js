@@ -123,6 +123,13 @@ test('loop stops on limits and cancellation', async () => {
   const bogus = await runComputerTask({ userId: 'x', task: 't', sessionId: 's', browser, vault,
     decide: async () => ({ action: 'nope' }), requestSecrets: async () => null, settleMs: 0, sleep: async () => {}, maxSteps: 3 });
   assert.equal(bogus.status, 'max_steps');
+  let turns = 0;
+  const changingBrowser = { ...browser, elements: async () => ({ window: { url: `https://example.com/${turns}` }, elements: [] }) };
+  const unlimited = await runComputerTask({ userId: 'x', task: 't', sessionId: 's', browser: changingBrowser, vault,
+    decide: async () => ++turns === 90 ? { action: 'done', summary: 'finished' } : { action: 'click', x: turns, y: 1 },
+    requestSecrets: async () => null, settleMs: 0, sleep: async () => {}, maxSteps: 0 });
+  assert.equal(unlimited.status, 'done');
+  assert.equal(unlimited.steps, 90);
   const ac = new AbortController();
   ac.abort();
   const stopped = await runComputerTask({ userId: 'x', task: 't', sessionId: 's', browser, vault,

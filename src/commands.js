@@ -24,6 +24,11 @@ const commands = [
     .addSubcommand(s => s.setName('clear').setDescription("Delete all memories").setDescriptionLocalizations({"ja":"全記憶を削除","zh-CN":"删除全部记忆","zh-TW":"删除全部记忆"})),
   new SlashCommandBuilder().setName('stop')
     .setDescription("Stop the browser task and save its state").setDescriptionLocalizations({"ja":"Agentのブラウザ作業を止めて画面を保存する","zh-CN":"停止浏览器任务并保存状态","zh-TW":"停止浏览器任务并保存状态"}),
+  new SlashCommandBuilder().setName('steps')
+    .setDescription('Show or set browser actions per task (0 = unlimited)')
+    .setDescriptionLocalizations({ ja: 'ブラウザ作業の操作回数を表示・設定（0は無制限）', 'zh-CN': '查看或设置浏览器操作次数（0为无限）', 'zh-TW': '查看或設定瀏覽器操作次數（0為無限）' })
+    .addIntegerOption(o => o.setName('count').setDescription('Actions per task; 0 = unlimited. Omit to show current setting')
+      .setDescriptionLocalizations({ ja: '1作業の操作回数。0は無制限。省略すると現在値を表示', 'zh-CN': '每项任务的操作次数；0为无限，省略则查看', 'zh-TW': '每項工作的操作次數；0為無限，省略則查看' }).setMinValue(0)),
   new SlashCommandBuilder().setName('service')
     .setDescription("External services (Google Workspace / Microsoft 365)").setDescriptionLocalizations({"ja":"外部サービス接続 (Google Workspace / Microsoft 365)","zh-CN":"外部服务（Google Workspace / Microsoft 365）","zh-TW":"外部服务（Google Workspace / Microsoft 365）"})
     .addSubcommand(s => s.setName('list').setDescription("List connections").setDescriptionLocalizations({"ja":"接続状況の一覧","zh-CN":"查看连接状态","zh-TW":"查看连接状态"}))
