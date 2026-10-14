@@ -9,11 +9,10 @@ import { t, LANG_NAMES } from './i18n.js';
 import { userLang, noteAutoLang, noteLocale, languageTag } from './user-lang.js';
 import { store, clearHarkletDatabase } from './db.js';
 import { chatDsh, invalidateUserAgents, recordComputerOutcome, shutdownDsh } from './dsh-agent.js';
-import { homePayload, geocodeCity, customCard } from './home.js';
+import { homePayload, geocodeCity } from './home.js';
 import { listModels, modelChoices } from './llm.js';
 import { parseWhen, fmtTs } from './schedule.js';
-import { handleComputerInteraction, startComputerTask, computerIsBusy, computerMaxSteps, computerRunning } from './computer/controller.js';
-import { startWebUi } from './web/server.js';
+import { handleComputerInteraction, startComputerTask, computerIsBusy, computerMaxSteps } from './computer/controller.js';
 import { detachedProjectThreads } from './reset-plan.js';
 import * as google from './connect/google.js';
 import * as m365 from './connect/m365.js';
@@ -45,13 +44,6 @@ const modelPages = new Map(); // userId -> page index
 const modelQueries = new Map(); // userId -> search term
 const pendingResets = new Map(); // guildId -> { userId, expires }
 const resettingGuilds = new Set();
-let webUi = null;
-const webEvents = new Map();
-function webNotice(userId, message) {
-  const list = webEvents.get(userId) ?? [];
-  list.push({ id: Date.now() + ':' + Math.random(), message, at: Date.now() });
-  webEvents.set(userId, list.slice(-12));
-}
 // Google OAuth ループバック用 state → 誰の接続フローか (CSRF防止・モーダル検証)
 const connectStates = new Map(); // state -> { userId, provider, expires }
 
@@ -192,7 +184,6 @@ async function execAction({ userId, channel, action, scope, computerChannel, pri
       userId, task, channel: target,
       onDone: async (outcome, result) => {
         if (scope) recordComputerOutcome(userId, scope, task, outcome);
-        if (scope?.startsWith('web:')) webNotice(userId, outcome);
         const learned = learnCompletedWorkflow(store, userId, task, result);
         if (learned?.promoted) {
           try {
@@ -416,78 +407,7 @@ async function runAction(interaction, action) {
 
 // ---------- command handlers ----------
 
-function webState(userId) {
-  const settings = store.getSettings(userId) ?? {};
-  return {
-    history: store.recentHistory('web:' + userId, 30),
-    cards: store.listHomeCards(userId).map(({ id, title, prompt, emoji, color, buttons }) => ({ id, title, prompt, emoji, color, buttons: buttons ? JSON.parse(buttons) : [] })),
-    reminders: store.listReminders(userId),
-    memories: store.listMemories(userId).slice(0, 8),
-    projects: store.listPanels(userId),
-    specialties: store.listSpecialties(userId).slice(0, 8),
-    events: webEvents.get(userId) ?? [],
-    computerRunning: computerRunning(userId),
-    steps: computerMaxSteps(userId),
-    name: client.users.cache.get(userId)?.displayName || 'You',
-    city: settings.home_city ?? null,
-  };
-}
-
-async function webChannel(userId, kind) {
-  if (kind === 'project' && config.guildId) {
-    const id = store.getProjectChannel(config.guildId);
-    if (id) return client.channels.fetch(id);
-  }
-  return (await client.users.fetch(userId)).createDM();
-}
-
-function webResult(result) {
-  return typeof result === 'string' ? result : String(result?.content ?? '完了');
-}
-
-async function webExecute(userId, action) {
-  const channel = await webChannel(userId, action.kind);
-  return webResult(await execAction({ userId, channel, action, scope: 'web:' + userId }));
-}
-
-async function webChat(userId, text) {
-  noteAutoLang(userId, text);
-  const result = await chatDsh(userId, 'web:' + userId, text);
-  const buttons = [];
-  const events = [];
-  for (const action of result.actions ?? []) {
-    if (action?.auto === true || action?.kind === 'computer') {
-      try { events.push(await webExecute(userId, action)); }
-      catch (err) { events.push('⚠️ ' + err.message); }
-    } else if (action?.kind && action?.label) {
-      buttons.push({ id: store.addAction(userId, action), label: String(action.label).slice(0, 80) });
-    }
-  }
-  return { reply: result.reply, buttons, events };
-}
-
-async function webAction(userId, id) {
-  const saved = store.getAction(id);
-  if (!saved || saved.userId !== userId) return { error: 'Action unavailable' };
-  const message = await webExecute(userId, saved.payload);
-  store.delAction(id);
-  webNotice(userId, message);
-  return { message };
-}
-
-async function webPanel(userId, id) {
-  const card = store.listHomeCards(userId).find(item => item.id === id);
-  if (!card) return { error: 'Panel unavailable' };
-  const result = await customCard(userId, card);
-  return { content: result?.embed?.toJSON().description ?? 'Could not update this panel.' };
-}
-
 const handlers = {
-  async web(i) {
-    const lang = userLang(i.user.id);
-    if (!webUi) return i.reply({ content: t(lang, 'web.unavailable'), flags: MessageFlags.Ephemeral });
-    return i.reply({ content: t(lang, 'web.link', { url: webUi.issueLink(i.user.id) }), flags: MessageFlags.Ephemeral });
-  },
   async steps(i) {
     const count = i.options.getInteger('count');
     if (count !== null) store.setComputerMaxSteps(i.user.id, count);
@@ -1030,12 +950,6 @@ client.on('messageCreate', async (message) => {
 
 client.once('clientReady', () => {
   console.log(`Harklet logged in as ${client.user.tag}`);
-  const port = Number(process.env.HARKLET_WEB_PORT || 8787);
-  if (Number.isInteger(port) && port >= 1 && port <= 65535) {
-    void startWebUi({ state: webState, chat: webChat, action: webAction, panel: webPanel, port })
-      .then(server => { webUi = server; console.log(`[web] http://127.0.0.1:${server.port}`); })
-      .catch(err => console.error('[web] could not start:', err.message));
-  }
   setInterval(deliverReminders, 15_000).unref();
   setInterval(sendBriefs, 30_000).unref();
   setInterval(refreshHomes, 1_800_000).unref();

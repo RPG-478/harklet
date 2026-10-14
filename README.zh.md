@@ -19,7 +19,6 @@
 | Home | `/start` 设置仪表盘，显示今日行动、提醒和记忆。天气需要设置城市，GitHub 概要需要 `GITHUB_USER`；每 30 分钟刷新 |
 | Projects | 在聊天中请求创建项目子区，或使用 Projects 按钮 |
 | Agent浏览器 | 在聊天中请求网页操作；Harklet 启动每用户专用 Quicksand Linux VM 并汇报结果。`/stop` 保存并关闭；[设置与限制](docs/browser-agent.md) |
-| 网页界面 | `/web` 提供私人链接，在运行机器的 `127.0.0.1:8787` 打开聊天、操作、提醒、Projects 和 Panels。链接5分钟后失效；`HARKLET_WEB_PORT=0` 可关闭 |
 | 实时画面 | 浏览器任务开始时通过私信发送只读 noVNC 链接。安装 cloudflared 后可通过 HTTPS 在手机或其他网络查看；可选交互模式供用户处理人工验证 |
 | 面板 (Panels) | Home 卡片是 Hark 风格面板：Agent 可创建能拉取已连接服务实时数据、自带操作按钮的卡片。回复 Home 消息即可用对话方式重新设计 |
 
