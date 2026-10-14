@@ -26,6 +26,11 @@ function visionModel() {
   return process.env.HARKLET_CU_MODEL?.trim() || config.llm.model;
 }
 
+function computerMaxSteps() {
+  const value = Number(process.env.HARKLET_CU_MAX_STEPS);
+  return Number.isInteger(value) && value >= 1 && value <= 200 ? value : 80;
+}
+
 export async function handleComputerInteraction(interaction) {
   noteLocale(interaction.user.id, interaction.locale);
   if (interaction.isChatInputCommand() && interaction.commandName === 'stop') {
@@ -119,6 +124,7 @@ async function runTask(userId, s, task, abort, channel, post, onDone) {
   let result;
   try {
     result = await runComputerTask({
+      maxSteps: computerMaxSteps(),
       lang: responseLanguage(userId),
       userId,
       task,
